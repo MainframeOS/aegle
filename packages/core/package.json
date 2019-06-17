@@ -1,0 +1,36 @@
+{
+  "name": "@aegle/core",
+  "version": "0.1.0",
+  "description": "Aegle core",
+  "repository": "git@github.com:MainframeHQ/aegle.git",
+  "main": "lib/index.js",
+  "types": "types/index.d.ts",
+  "author": "Mainframe",
+  "license": "MIT",
+  "files": [
+    "lib/*",
+    "types/*"
+  ],
+  "scripts": {
+    "clean": "del lib types",
+    "build:js": "BABEL_ENV=node babel src --out-dir lib --extensions \".ts\"",
+    "build:types": "tsc --emitDeclarationOnly",
+    "build": "yarn clean && yarn build:js && yarn build:types",
+    "test:types": "tsc --noEmit",
+    "prepublishOnly": "yarn build"
+  },
+  "dependencies": {
+    "@erebos/api-bzz-base": "^0.8.1",
+    "@erebos/keccak256": "^0.7.0",
+    "@erebos/secp256k1": "^0.7.0",
+    "@erebos/timeline": "^0.8.0",
+    "@types/elliptic": "^6.4.9",
+    "ajv": "^6.10.0",
+    "get-stream": "^5.1.0",
+    "p-queue": "^6.0.2",
+    "rxjs": "^6.5.2"
+  },
+  "devDependencies": {
+    "@erebos/api-bzz-node": "^0.8.1"
+  }
+}
