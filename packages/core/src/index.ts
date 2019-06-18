@@ -1,4 +1,10 @@
-export { createPeerPublisher, createPeerSubscriber } from './protocols/peer'
+export {
+  createPeerPublisher,
+  createPeerSubscriber,
+  createPeerContactSubscriber,
+  readPeerContact,
+  writePeerContact,
+} from './protocols'
 export { Peer, peerSchema } from './schemas/peer'
 export {
   createEntityPublisher,

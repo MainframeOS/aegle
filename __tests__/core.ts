@@ -5,6 +5,8 @@ import {
   // protocols
   createPeerPublisher,
   createPeerSubscriber,
+  readPeerContact,
+  writePeerContact,
   // channels
   getPublicAddress,
   getFeedReadParams,
@@ -194,8 +196,12 @@ describe('protocols', () => {
       },
     }
 
-    const subscription = createPeerSubscriber(bzz, pubKey, {
-      interval: 1000,
+    const subscription = createPeerSubscriber({
+      bzz,
+      peer: pubKey,
+      options: {
+        interval: 1000,
+      },
     }).subscribe({
       next: loadedPeer => {
         expect(loadedPeer).toEqual(peer)
@@ -206,5 +212,38 @@ describe('protocols', () => {
 
     const publish = createPeerPublisher(bzz, keyPair)
     await publish(peer)
+  })
+
+  test('peerContact', async () => {
+    const bzz = new Bzz({
+      url: 'http://localhost:8500',
+      signBytes: async (bytes, key) => sign(bytes, key),
+    })
+
+    const aliceKeyPair = createKeyPair()
+    const bobKeyPair = createKeyPair()
+
+    const sendPeerContact = {
+      contactPublicKey: createKeyPair().getPublic('hex'),
+      peerAddress: getPublicAddress(aliceKeyPair),
+    }
+
+    // Write Alice -> Bob peerContact using Alice's private key and Bob's public key
+    await writePeerContact(
+      {
+        bzz,
+        keyPair: aliceKeyPair,
+        peerKey: bobKeyPair.getPublic('hex'),
+      },
+      sendPeerContact,
+    )
+
+    // Read Alice -> Bob peerContact using Alice's public key and Bob's private key
+    const receivedPeerContact = await readPeerContact({
+      bzz,
+      keyPair: bobKeyPair,
+      peerKey: aliceKeyPair.getPublic('hex'),
+    })
+    expect(receivedPeerContact).toEqual(sendPeerContact)
   })
 })

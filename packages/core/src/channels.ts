@@ -43,20 +43,20 @@ export interface FeedReadParams {
 }
 
 export function getFeedReadParams(
-  publisher: string, // Can be a public key (130 chars long) or an address
+  writer: string, // Can be a public key (130 chars long) or an address
   name?: string,
   keyPair?: any, // TODO: KeyPair type
 ): FeedReadParams {
-  const pubKey = publisher.length === 130 ? createPublic(publisher) : null
+  const pubKey = writer.length === 130 ? createPublic(writer) : null
   const feed: FeedParams = {
-    user: pubKey === null ? publisher : getPublicAddress(pubKey),
+    user: pubKey === null ? writer : getPublicAddress(pubKey),
   }
 
   let encryptionKey: Buffer | undefined
   if (keyPair != null) {
     if (pubKey === null) {
       throw new Error(
-        'publisher argument must be a public key when keyPair is provided to derive the shared key',
+        'writer argument must be a public key when keyPair is provided to derive the shared key',
       )
     }
     encryptionKey = keyPair.derive(pubKey.getPublic()).toBuffer()
@@ -81,14 +81,14 @@ export interface FeedWriteParams extends FeedReadParams {
 export function getFeedWriteParams(
   keyPair: any, // TODO: KeyPair type
   name?: string,
-  subscriber?: string,
+  reader?: string,
 ): FeedWriteParams {
   const user = getPublicAddress(keyPair)
   const feed: FeedParams = { user }
 
   let encryptionKey: Buffer | undefined
-  if (subscriber != null) {
-    const pubKey = createPublic(subscriber)
+  if (reader != null) {
+    const pubKey = createPublic(reader)
     encryptionKey = keyPair.derive(pubKey.getPublic()).toBuffer()
     feed.topic = getFeedTopic({
       name,
@@ -111,17 +111,33 @@ export interface ChannelParams {
   name?: string
 }
 
-export interface PublisherParams extends ChannelParams {
+export interface WriterParams extends ChannelParams {
   keyPair: KeyPair
   options?: UploadOptions
-  subscriber?: string
+  reader?: string
 }
 
-export function createFeedPublisher<T>(params: PublisherParams) {
+export async function writeFeedEntity<T>(
+  params: WriterParams,
+  data: T,
+): Promise<string> {
   const { feed, encryptionKey, signParams } = getFeedWriteParams(
     params.keyPair,
     params.name,
-    params.subscriber,
+    params.reader,
+  )
+  const payload = await encodePayload(
+    { type: params.entityType, data },
+    { key: encryptionKey },
+  )
+  return await params.bzz.setFeedContent(feed, payload, undefined, signParams)
+}
+
+export function createFeedPublisher<T>(params: WriterParams) {
+  const { feed, encryptionKey, signParams } = getFeedWriteParams(
+    params.keyPair,
+    params.name,
+    params.reader,
   )
   const push = async (content: T) => {
     const payload = await encodePayload(content, { key: encryptionKey })
@@ -130,15 +146,15 @@ export function createFeedPublisher<T>(params: PublisherParams) {
   return createEntityPublisher(params.entityType, push)
 }
 
-export function createTimelinePublisher<T>(params: PublisherParams) {
+export function createTimelinePublisher<T>(params: WriterParams) {
   const { feed, encryptionKey, signParams } = getFeedWriteParams(
     params.keyPair,
     params.name,
-    params.subscriber,
+    params.reader,
   )
 
   let encode
-  if (params.subscriber != null) {
+  if (params.reader != null) {
     encode = async (chapter: PartialChapter) => {
       return await encodePayload(chapter, { key: encryptionKey })
     }
@@ -156,8 +172,26 @@ export function createTimelinePublisher<T>(params: PublisherParams) {
 }
 
 export interface ReaderParams extends ChannelParams {
-  publisher: string
+  writer: string
   keyPair?: KeyPair
+}
+
+export async function readFeedEntity<T>(
+  params: ReaderParams,
+): Promise<T | null> {
+  const { feed, encryptionKey } = getFeedReadParams(
+    params.writer,
+    params.name,
+    params.keyPair,
+  )
+
+  const res = await params.bzz.getFeedContent(feed, { mode: 'raw' })
+  if (res === null) {
+    return null
+  }
+
+  const payload = await decodeEntityStream<T>(res.body, { key: encryptionKey })
+  return payload.data
 }
 
 export interface SubscriberParams extends ReaderParams {
@@ -166,7 +200,7 @@ export interface SubscriberParams extends ReaderParams {
 
 export function createFeedSubscriber<T>(params: SubscriberParams) {
   const { feed, encryptionKey } = getFeedReadParams(
-    params.publisher,
+    params.writer,
     params.name,
     params.keyPair,
   )
@@ -192,7 +226,7 @@ export function createTimelineDecoder(params?: DecodeParams) {
 
 export function createReadTimeline(params: ReaderParams) {
   const { feed, encryptionKey } = getFeedReadParams(
-    params.publisher,
+    params.writer,
     params.name,
     params.keyPair,
   )

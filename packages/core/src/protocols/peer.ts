@@ -6,19 +6,23 @@ import { Peer } from '../schemas/peer'
 import { createFeedPublisher, createFeedSubscriber } from '../channels'
 import { PEER_NAME } from '../namespace'
 
+export interface PeerSubscriberParams {
+  bzz: Bzz<any>
+  peer: string
+  options: PollContentOptions
+}
+
 export function createPeerSubscriber(
-  bzz: Bzz<any>,
-  peerKeyOrAddress: string,
-  options: PollContentOptions,
+  params: PeerSubscriberParams,
 ): Observable<Peer> {
   return createFeedSubscriber<Peer>({
-    bzz,
+    bzz: params.bzz,
     entityType: PEER_NAME,
     name: PEER_NAME,
-    publisher: peerKeyOrAddress,
+    writer: params.peer,
     options: {
       whenEmpty: 'ignore',
-      ...options,
+      ...params.options,
       mode: 'raw',
     },
   }).pipe(map((payload: any) => payload.data))
