@@ -4,15 +4,15 @@ export const NAMESPACE_VERSION = 'v0'
 
 export const PROTOCOL_NAME = 'aegle://'
 
+export function getID(name: string): string {
+  return name.startsWith(PROTOCOL_NAME) ? name : PROTOCOL_NAME + name
+}
+
 export function namespace(
   name: string,
   version: string = NAMESPACE_VERSION,
 ): string {
   return `${NAMESPACE_PREFIX}.${name}.${version}`
-}
-
-export function getID(name: string): string {
-  return name.startsWith(PROTOCOL_NAME) ? name : PROTOCOL_NAME + name
 }
 
 export const CONTACT_NAME = namespace('contact')

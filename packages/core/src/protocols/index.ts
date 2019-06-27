@@ -1,3 +1,4 @@
+export { createContactSubscriber, readContact, writeContact } from './contact'
 export {
   FileSystemReader,
   FileSystemReaderParams,

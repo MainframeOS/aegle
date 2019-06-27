@@ -4,7 +4,7 @@ import { map } from 'rxjs/operators'
 
 import { PeerContact } from '../schemas/peerContact'
 import {
-  createFeedSubscriber,
+  createEntityFeedSubscriber,
   readFeedEntity,
   writeFeedEntity,
 } from '../channels'
@@ -51,7 +51,7 @@ export interface PeerContactSubscriberParams extends PeerContactParams {
 export function createPeerContactSubscriber(
   params: PeerContactSubscriberParams,
 ): Observable<PeerContact> {
-  return createFeedSubscriber<PeerContact>({
+  return createEntityFeedSubscriber<PeerContact>({
     bzz: params.bzz,
     entityType: PEER_CONTACT_NAME,
     keyPair: params.keyPair,

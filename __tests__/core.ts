@@ -4,6 +4,8 @@ import getStream from 'get-stream'
 
 import {
   // protocols
+  readContact,
+  writeContact,
   FileSystemReader,
   FileSystemWriter,
   downloadFile,
@@ -200,6 +202,35 @@ describe('protocols', () => {
   const bzz = new Bzz({
     url: 'http://localhost:8500',
     signBytes: async (bytes, key) => sign(bytes, key),
+  })
+
+  test('contact', async () => {
+    const aliceKeyPair = createKeyPair()
+    const bobKeyPair = createKeyPair()
+
+    const sendContact = {
+      profile: {
+        displayName: 'Alice',
+      },
+    }
+
+    // Write Alice -> Bob contact using Alice's private key and Bob's public key
+    await writeContact(
+      {
+        bzz,
+        keyPair: aliceKeyPair,
+        contactKey: bobKeyPair.getPublic('hex'),
+      },
+      sendContact,
+    )
+
+    // Read Alice -> Bob contact using Alice's public key and Bob's private key
+    const receivedContact = await readContact({
+      bzz,
+      keyPair: bobKeyPair,
+      contactKey: aliceKeyPair.getPublic('hex'),
+    })
+    expect(receivedContact).toEqual(sendContact)
   })
 
   describe('fileSystem', () => {

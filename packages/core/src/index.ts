@@ -1,4 +1,8 @@
 export {
+  // Contact
+  createContactSubscriber,
+  readContact,
+  writeContact,
   // FileSystem
   FileSystemReader,
   FileSystemReaderParams,
