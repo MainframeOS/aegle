@@ -5,6 +5,7 @@ import Bzz, {
   UploadOptions,
   getFeedTopic,
 } from '@erebos/api-bzz-base'
+import { hexValue } from '@erebos/hex'
 import { pubKeyToAddress } from '@erebos/keccak256'
 import { createPublic } from '@erebos/secp256k1'
 import {
@@ -18,16 +19,16 @@ import PQueue from 'p-queue'
 import { flatMap } from 'rxjs/operators'
 
 import { decodeEntityStream, encodePayload, getBodyStream } from './encoding'
-import { DecodeParams, KeyPair } from './types'
+import { DecodeParams, EntityPayload, KeyPair } from './types'
 import { validateEntity } from './validation'
 
-export function createEntityPublisher<T>(
+export function createEntityPublisher<T, U>(
   type: string,
-  push: (data: any) => Promise<T>,
+  push: (data: any) => Promise<U>,
 ) {
   const queue = new PQueue({ concurrency: 1 })
-  return async function publish(data: any): Promise<T> {
-    const entity = await validateEntity({ type, data })
+  return async function publish(data: T): Promise<U> {
+    const entity = await validateEntity<T>({ type, data })
     return await queue.add(() => push(entity))
   }
 }
@@ -133,20 +134,20 @@ export async function writeFeedEntity<T>(
   return await params.bzz.setFeedContent(feed, payload, undefined, signParams)
 }
 
-export function createFeedPublisher<T>(params: WriterParams) {
+export function createEntityFeedPublisher<T>(params: WriterParams) {
   const { feed, encryptionKey, signParams } = getFeedWriteParams(
     params.keyPair,
     params.name,
     params.reader,
   )
-  const push = async (content: T) => {
+  const push = async (content: T): Promise<hexValue> => {
     const payload = await encodePayload(content, { key: encryptionKey })
     return await params.bzz.setFeedContent(feed, payload, undefined, signParams)
   }
-  return createEntityPublisher(params.entityType, push)
+  return createEntityPublisher<T, hexValue>(params.entityType, push)
 }
 
-export function createTimelinePublisher<T>(params: WriterParams) {
+export function createEntityTimelinePublisher<T>(params: WriterParams) {
   const { feed, encryptionKey, signParams } = getFeedWriteParams(
     params.keyPair,
     params.name,
@@ -168,7 +169,10 @@ export function createTimelinePublisher<T>(params: WriterParams) {
   const add = timeline.createAddChapter()
   const push = async (content: T): Promise<Chapter> => await add({ content })
 
-  return createEntityPublisher(params.entityType, push)
+  return createEntityPublisher<T, Chapter<EntityPayload<T>>>(
+    params.entityType,
+    push,
+  )
 }
 
 export interface ReaderParams extends ChannelParams {
@@ -194,11 +198,31 @@ export async function readFeedEntity<T>(
   return payload.data
 }
 
+export function createEntityFeedReader<T>(params: ReaderParams) {
+  const { feed, encryptionKey } = getFeedReadParams(
+    params.writer,
+    params.name,
+    params.keyPair,
+  )
+
+  return async function read(): Promise<T | null> {
+    const res = await params.bzz.getFeedContent(feed, { mode: 'raw' })
+    if (res === null) {
+      return null
+    }
+
+    const payload = await decodeEntityStream<T>(res.body, {
+      key: encryptionKey,
+    })
+    return payload.data
+  }
+}
+
 export interface SubscriberParams extends ReaderParams {
   options: PollContentOptions
 }
 
-export function createFeedSubscriber<T>(params: SubscriberParams) {
+export function createEntityFeedSubscriber<T>(params: SubscriberParams) {
   const { feed, encryptionKey } = getFeedReadParams(
     params.writer,
     params.name,
@@ -214,7 +238,7 @@ export function createFeedSubscriber<T>(params: SubscriberParams) {
   )
 }
 
-export function createTimelineDecoder(params?: DecodeParams) {
+export function createEntityTimelineDecoder(params?: DecodeParams) {
   return async function decode(res: Readable) {
     const stream = await getBodyStream(res, params)
     const body = await getStream(stream)
@@ -224,7 +248,7 @@ export function createTimelineDecoder(params?: DecodeParams) {
   }
 }
 
-export function createReadTimeline(params: ReaderParams) {
+export function createEntityReadTimeline(params: ReaderParams) {
   const { feed, encryptionKey } = getFeedReadParams(
     params.writer,
     params.name,
@@ -233,16 +257,16 @@ export function createReadTimeline(params: ReaderParams) {
   return new Timeline({
     bzz: params.bzz,
     feed,
-    decode: createTimelineDecoder({ key: encryptionKey }),
+    decode: createEntityTimelineDecoder({ key: encryptionKey }),
   })
 }
 
-export function createTimelineLatestSubscriber(params: SubscriberParams) {
-  const timeline = createReadTimeline(params)
+export function createEntityTimelineLatestSubscriber(params: SubscriberParams) {
+  const timeline = createEntityReadTimeline(params)
   return timeline.pollLatestChapter(params.options)
 }
 
-export function createTimelineLiveSubscriber(params: SubscriberParams) {
-  const timeline = createReadTimeline(params)
+export function createEntityTimelineLiveSubscriber(params: SubscriberParams) {
+  const timeline = createEntityReadTimeline(params)
   return timeline.live(params.options)
 }

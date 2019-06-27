@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@erebos/api-bzz-base": "^0.8.1",
+    "@erebos/hex": "^0.7.0",
     "@erebos/keccak256": "^0.7.0",
     "@erebos/secp256k1": "^0.7.0",
     "@erebos/timeline": "^0.8.0",

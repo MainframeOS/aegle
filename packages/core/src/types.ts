@@ -1,6 +1,13 @@
+import { CipherGCM } from 'crypto'
 import elliptic from 'elliptic'
 
 export type KeyPair = elliptic.ec.KeyPair
+
+export interface CipherParams {
+  algorithm: string
+  cipher: CipherGCM
+  iv: string
+}
 
 export interface EncryptionParams {
   algorithm: string

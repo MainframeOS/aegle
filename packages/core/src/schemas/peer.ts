@@ -1,4 +1,6 @@
-import { Profile, profileProperties } from './profile'
+import { PEER_NAME, getID } from '../namespace'
+
+import { Profile, profileProperty } from './profile'
 import { publicKeyProperty } from './publicKey'
 
 export interface Peer {
@@ -8,9 +10,12 @@ export interface Peer {
 
 export const peerSchema = {
   $async: true,
+  $id: getID(PEER_NAME),
+  type: 'object',
+  required: ['publicKey'],
   properties: {
-    profile: profileProperties,
+    profile: profileProperty,
     publicKey: publicKeyProperty,
   },
-  required: ['publicKey'],
+  additionalProperties: false,
 }

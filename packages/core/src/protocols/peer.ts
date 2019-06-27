@@ -3,7 +3,10 @@ import { Observable } from 'rxjs'
 import { map } from 'rxjs/operators'
 
 import { Peer } from '../schemas/peer'
-import { createFeedPublisher, createFeedSubscriber } from '../channels'
+import {
+  createEntityFeedPublisher,
+  createEntityFeedSubscriber,
+} from '../channels'
 import { PEER_NAME } from '../namespace'
 
 export interface PeerSubscriberParams {
@@ -15,7 +18,7 @@ export interface PeerSubscriberParams {
 export function createPeerSubscriber(
   params: PeerSubscriberParams,
 ): Observable<Peer> {
-  return createFeedSubscriber<Peer>({
+  return createEntityFeedSubscriber<Peer>({
     bzz: params.bzz,
     entityType: PEER_NAME,
     name: PEER_NAME,
@@ -30,7 +33,7 @@ export function createPeerSubscriber(
 
 // TODO: keyPair type
 export function createPeerPublisher(bzz: Bzz<any>, keyPair: any) {
-  return createFeedPublisher<Peer>({
+  return createEntityFeedPublisher<Peer>({
     bzz,
     entityType: PEER_NAME,
     keyPair,

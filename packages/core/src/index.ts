@@ -1,6 +1,16 @@
 export {
+  // FileSystem
+  FileSystemReader,
+  FileSystemReaderParams,
+  FileSystemWriter,
+  FileSystemWriterParams,
+  FileUploadParams,
+  downloadFile,
+  uploadFile,
+  // Peer
   createPeerPublisher,
   createPeerSubscriber,
+  // PeerContact
   createPeerContactSubscriber,
   readPeerContact,
   writePeerContact,
@@ -12,6 +22,17 @@ export {
   getFeedReadParams,
   getFeedWriteParams,
 } from './channels'
-export { HEADER_SIZE_BYTES, HEADER_MAX_SIZE } from './constants'
-export { randomBytesAsync, decrypt, encrypt } from './crypto'
+export {
+  CRYPTO_KEY_LENGTH,
+  HEADER_SIZE_BYTES,
+  HEADER_MAX_SIZE,
+} from './constants'
+export {
+  createKey,
+  createRandomBytes,
+  decrypt,
+  decryptJSON,
+  encrypt,
+  encryptJSON,
+} from './crypto'
 export { decodeHeaderSize, encodeHeaderSize } from './encoding'

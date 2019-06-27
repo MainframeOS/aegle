@@ -5,10 +5,13 @@ export interface Profile {
   walletAddress?: string
 }
 
-export const profileProperties = {
-  displayName: {
-    type: 'string',
-    maxLength: 50,
+export const profileProperty = {
+  type: 'object',
+  properties: {
+    displayName: {
+      type: 'string',
+      maxLength: 50,
+    },
+    walletAddress: ethereumAddressProperty,
   },
-  walletAddress: ethereumAddressProperty,
 }

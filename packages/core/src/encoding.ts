@@ -6,7 +6,7 @@ import {
   HEADER_MAX_SIZE,
   HEADER_SIZE_BYTES,
 } from './constants'
-import { createDecipher, encrypt } from './crypto'
+import { createDecipher, encryptJSON } from './crypto'
 import {
   DecodeParams,
   EncodeParams,
@@ -103,7 +103,7 @@ export async function encodePayload(
   if (params.key == null) {
     body = toBuffer(payload)
   } else {
-    const encrypted = await encrypt(
+    const encrypted = await encryptJSON(
       params.algorithm || CRYPTO_ALGORITHM,
       params.key,
       payload,

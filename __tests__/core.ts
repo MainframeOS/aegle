@@ -1,8 +1,13 @@
 import Bzz from '@erebos/api-bzz-node'
 import { createKeyPair, sign } from '@erebos/secp256k1'
+import getStream from 'get-stream'
 
 import {
   // protocols
+  FileSystemReader,
+  FileSystemWriter,
+  downloadFile,
+  uploadFile,
   createPeerPublisher,
   createPeerSubscriber,
   readPeerContact,
@@ -12,12 +17,14 @@ import {
   getFeedReadParams,
   getFeedWriteParams,
   // constants
+  CRYPTO_KEY_LENGTH,
   HEADER_MAX_SIZE,
   HEADER_SIZE_BYTES,
   // crypto
-  randomBytesAsync,
-  decrypt,
-  encrypt,
+  createKey,
+  createRandomBytes,
+  decryptJSON,
+  encryptJSON,
   // encoding
   encodeHeaderSize,
   decodeHeaderSize,
@@ -126,6 +133,7 @@ describe('channels', () => {
   test.todo('createEntityPublisher()')
   test.todo('createFeedPublisher()')
   test.todo('createTimelinePublisher()')
+  test.todo('createFeedEntityReader()')
   test.todo('createFeedSubscriber()')
   test.todo('createTimelineDecoder()')
   test.todo('createReadTimeline()')
@@ -134,25 +142,32 @@ describe('channels', () => {
 })
 
 describe('crypto', () => {
-  test('randomBytesAsync()', async () => {
+  test('createRandomBytes()', async () => {
     const [someBytes, otherBytes] = await Promise.all([
-      randomBytesAsync(16),
-      randomBytesAsync(16),
+      createRandomBytes(16),
+      createRandomBytes(16),
     ])
     expect(someBytes.length).toBe(16)
     expect(otherBytes.length).toBe(16)
     expect(someBytes.equals(otherBytes)).toBe(false)
   })
 
-  test('encrypts and decrypts', async () => {
-    const key = await randomBytesAsync(32)
+  test('createKey()', async () => {
+    const [key1, key2] = await Promise.all([createKey(), createKey()])
+    expect(key1.length).toBe(CRYPTO_KEY_LENGTH)
+    expect(key2.length).toBe(CRYPTO_KEY_LENGTH)
+    expect(key1.equals(key2)).toBe(false)
+  })
+
+  test('encrypts and decrypts JSON', async () => {
+    const key = await createKey()
     const data = { hello: 'test' }
-    const payload = await encrypt('aes-256-gcm', key, data)
-    const decrypted = await decrypt(key, payload)
+    const payload = await encryptJSON('aes-256-gcm', key, data)
+    const decrypted = await decryptJSON(key, payload)
     expect(decrypted).toEqual(data)
 
-    const otherKey = await randomBytesAsync(32)
-    await expect(decrypt(otherKey, payload)).rejects.toThrow(
+    const otherKey = await createKey()
+    await expect(decryptJSON(otherKey, payload)).rejects.toThrow(
       'Unsupported state or unable to authenticate data',
     )
   })
@@ -182,11 +197,69 @@ describe('encoding', () => {
 })
 
 describe('protocols', () => {
-  test('peer', async done => {
-    const bzz = new Bzz({
-      url: 'http://localhost:8500',
-      signBytes: async (bytes, key) => sign(bytes, key),
+  const bzz = new Bzz({
+    url: 'http://localhost:8500',
+    signBytes: async (bytes, key) => sign(bytes, key),
+  })
+
+  describe('fileSystem', () => {
+    test('uploadFile() and downloadFile()', async () => {
+      const data = 'Hello test'
+      const file = await uploadFile(bzz, data, { encrypt: true })
+      expect(file.hash).toBeDefined()
+      expect(file.encryption).toBeDefined()
+
+      const res = await downloadFile(bzz, file)
+      const text = await getStream(res)
+      expect(text).toBe(data)
     })
+
+    test('FileSystemReader and FileSystemWriter classes', async () => {
+      const aliceKeyPair = createKeyPair()
+      const bobKeyPair = createKeyPair()
+
+      const writer = new FileSystemWriter({
+        bzz,
+        keyPair: aliceKeyPair,
+        reader: bobKeyPair.getPublic('hex'),
+        files: {},
+      })
+      const reader = new FileSystemReader({
+        bzz,
+        keyPair: bobKeyPair,
+        writer: aliceKeyPair.getPublic('hex'),
+      })
+
+      const filePath = '/hello.txt'
+      const fileText = 'Hello there!'
+
+      await writer.uploadFile(filePath, fileText, { encrypt: true })
+      await writer.push()
+
+      await reader.pull()
+      expect(reader.hasFile(filePath)).toBe(true)
+
+      const text = await reader.downloadText(filePath)
+      expect(text).toBe(fileText)
+
+      const otherPath = '/other.json'
+      const otherData = { hello: 'Bob' }
+
+      expect(reader.hasFile(otherPath)).toBe(false)
+      await writer.uploadFile(otherPath, otherData, {
+        encrypt: true,
+      })
+      await writer.push()
+
+      await reader.pull()
+      expect(reader.hasFile(otherPath)).toBe(true)
+
+      const data = await reader.downloadJSON(otherPath)
+      expect(data).toEqual(otherData)
+    })
+  })
+
+  test('peer', async done => {
     const keyPair = createKeyPair()
     const pubKey = keyPair.getPublic('hex')
     const peer = {
@@ -215,11 +288,6 @@ describe('protocols', () => {
   })
 
   test('peerContact', async () => {
-    const bzz = new Bzz({
-      url: 'http://localhost:8500',
-      signBytes: async (bytes, key) => sign(bytes, key),
-    })
-
     const aliceKeyPair = createKeyPair()
     const bobKeyPair = createKeyPair()
 
