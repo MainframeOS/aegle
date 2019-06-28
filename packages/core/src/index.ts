@@ -3,6 +3,11 @@ export {
   createContactSubscriber,
   readContact,
   writeContact,
+  // Messaging
+  MailboxReaderParams,
+  MailboxWriterParams,
+  createMailboxPublisher,
+  createMailboxReader,
   // FileSystem
   FileSystemReader,
   FileSystemReaderParams,

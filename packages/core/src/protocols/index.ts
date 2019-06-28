@@ -1,5 +1,11 @@
 export { createContactSubscriber, readContact, writeContact } from './contact'
 export {
+  MailboxReaderParams,
+  MailboxWriterParams,
+  createMailboxReader,
+  createMailboxPublisher,
+} from './messaging'
+export {
   FileSystemReader,
   FileSystemReaderParams,
   FileSystemWriter,

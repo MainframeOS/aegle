@@ -1,7 +1,7 @@
+import { MESSAGE_NAME, getID } from '../namespace'
+
 import { File, fileProperty } from './fileSystem'
-import { publicKeyProperty } from './publicKey'
-import { SwarmFeed, swarmFeedProperty } from './swarmFeed'
-import { swarmHashProperty } from './swarmHash'
+import { publicKeyProperty, swarmHashProperty } from './scalars'
 
 export interface MessageAttachment {
   file: File
@@ -27,6 +27,7 @@ export interface Message {
 
 export const messageSchema = {
   $async: true,
+  $id: getID(MESSAGE_NAME),
   type: 'object',
   required: ['body'],
   properties: {
@@ -41,27 +42,12 @@ export const messageSchema = {
   },
 }
 
-export interface Mailbox {
-  timeline: SwarmFeed
-  publicKey?: string
-}
-
-export const mailboxProperty = {
-  type: 'object',
-  required: ['timeline'],
-  properties: {
-    timeline: swarmFeedProperty,
-    publicKey: publicKeyProperty,
-  },
-  additionalProperties: false,
-}
-
-export type Mailboxes = Record<string, Mailbox>
+export type Mailboxes = Record<string, string>
 
 export const mailboxesProperty = {
   type: 'object',
   patternProperties: {
-    '^[0-9a-zA-Z-_. ]{1,50}$': swarmFeedProperty,
+    '^[0-9a-zA-Z-_. ]{1,50}$': publicKeyProperty,
   },
   additionalProperties: false,
 }

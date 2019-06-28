@@ -1,7 +1,6 @@
 import { PEER_CONTACT_NAME, getID } from '../namespace'
 
-import { ethereumAddressProperty } from './ethereumAddress'
-import { publicKeyProperty } from './publicKey'
+import { ethereumAddressProperty, publicKeyProperty } from './scalars'
 
 export interface PeerContact {
   contactPublicKey: string

@@ -1,7 +1,7 @@
 import { FILE_SYSTEM_NAME, getID } from '../namespace'
 import { EncryptionParams } from '../types'
 
-import { swarmHashProperty } from './swarmHash'
+import { swarmHashProperty } from './scalars'
 
 export interface FileEncryption extends EncryptionParams {
   key: string
@@ -29,6 +29,7 @@ export interface File extends FileMetadata {
 }
 
 export const fileProperty = {
+  type: 'object',
   required: ['hash'],
   properties: {
     hash: swarmHashProperty,

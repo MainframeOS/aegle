@@ -6,6 +6,8 @@ import {
   // protocols
   readContact,
   writeContact,
+  createMailboxPublisher,
+  createMailboxReader,
   FileSystemReader,
   FileSystemWriter,
   downloadFile,
@@ -231,6 +233,51 @@ describe('protocols', () => {
       contactKey: aliceKeyPair.getPublic('hex'),
     })
     expect(receivedContact).toEqual(sendContact)
+  })
+
+  test('messaging', async done => {
+    jest.setTimeout(10000)
+
+    const aliceMailboxKeyPair = createKeyPair()
+    const bobKeyPair = createKeyPair()
+
+    const publish = createMailboxPublisher({
+      bzz,
+      keyPair: aliceMailboxKeyPair,
+      reader: bobKeyPair.getPublic('hex'),
+    })
+
+    const firstMessage = { title: 'test', body: 'first' }
+    const chapter = await publish(firstMessage)
+
+    const reader = createMailboxReader({
+      bzz,
+      keyPair: bobKeyPair,
+      writer: aliceMailboxKeyPair.getPublic('hex'),
+    })
+
+    const firstChapter = await reader.getLatestChapter()
+    expect(firstChapter).toBeDefined()
+    expect(firstChapter.content.data).toEqual(firstMessage)
+
+    const secondMessage = { thread: chapter.id, title: 'test', body: 'second' }
+
+    const sub = reader.pollLatestChapter({ interval: 1000 }).subscribe({
+      next: chapter => {
+        const { data } = chapter.content
+        if (data.thread != null) {
+          expect(data).toEqual(secondMessage)
+          sub.unsubscribe()
+          done()
+        }
+      },
+      error: err => {
+        sub.unsubscribe()
+        throw err
+      },
+    })
+
+    await publish(secondMessage)
   })
 
   describe('fileSystem', () => {

@@ -1,7 +1,7 @@
 import { PEER_NAME, getID } from '../namespace'
 
 import { Profile, profileProperty } from './profile'
-import { publicKeyProperty } from './publicKey'
+import { publicKeyProperty } from './scalars'
 
 export interface Peer {
   profile?: Profile

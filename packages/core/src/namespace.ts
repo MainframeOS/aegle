@@ -17,5 +17,7 @@ export function namespace(
 
 export const CONTACT_NAME = namespace('contact')
 export const FILE_SYSTEM_NAME = namespace('fileSystem')
+export const MAILBOX_NAME = namespace('mailbox')
+export const MESSAGE_NAME = namespace('message')
 export const PEER_NAME = namespace('peer')
 export const PEER_CONTACT_NAME = namespace('peerContact')

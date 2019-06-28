@@ -240,7 +240,7 @@ export function createEntityFeedSubscriber<T>(params: SubscriberParams) {
 
 export function createEntityTimelineDecoder(params?: DecodeParams) {
   return async function decode(res: Readable) {
-    const stream = await getBodyStream(res, params)
+    const stream = await getBodyStream(res.body, params)
     const body = await getStream(stream)
     const chapter = validateChapter(JSON.parse(body))
     await validateEntity(chapter.content)
@@ -248,25 +248,29 @@ export function createEntityTimelineDecoder(params?: DecodeParams) {
   }
 }
 
-export function createEntityReadTimeline(params: ReaderParams) {
+export function createEntityReadTimeline<T = any>(params: ReaderParams) {
   const { feed, encryptionKey } = getFeedReadParams(
     params.writer,
     params.name,
     params.keyPair,
   )
-  return new Timeline({
+  return new Timeline<T>({
     bzz: params.bzz,
     feed,
     decode: createEntityTimelineDecoder({ key: encryptionKey }),
   })
 }
 
-export function createEntityTimelineLatestSubscriber(params: SubscriberParams) {
-  const timeline = createEntityReadTimeline(params)
+export function createEntityTimelineLatestSubscriber<T = any>(
+  params: SubscriberParams,
+) {
+  const timeline = createEntityReadTimeline<T>(params)
   return timeline.pollLatestChapter(params.options)
 }
 
-export function createEntityTimelineLiveSubscriber(params: SubscriberParams) {
-  const timeline = createEntityReadTimeline(params)
+export function createEntityTimelineLiveSubscriber<T = any>(
+  params: SubscriberParams,
+) {
+  const timeline = createEntityReadTimeline<T>(params)
   return timeline.live(params.options)
 }

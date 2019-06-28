@@ -1,11 +1,11 @@
 import { CONTACT_NAME, getID } from '../namespace'
 
-import { FileSystem, fileSystemProperty } from './fileSystem'
 import { Mailboxes, mailboxesProperty } from './messaging'
 import { Profile, profileProperty } from './profile'
+import { publicKeyProperty } from './scalars'
 
 export interface Contact {
-  files?: FileSystem
+  fileSystemKey?: string
   mailboxes?: Mailboxes
   profile?: Profile
 }
@@ -15,7 +15,7 @@ export const contactSchema = {
   $id: getID(CONTACT_NAME),
   type: 'object',
   properties: {
-    files: fileSystemProperty,
+    fileSystemKey: publicKeyProperty,
     mailboxes: mailboxesProperty,
     profile: profileProperty,
   },

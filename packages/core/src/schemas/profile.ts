@@ -1,4 +1,4 @@
-import { ethereumAddressProperty } from './ethereumAddress'
+import { ethereumAddressProperty } from './scalars'
 
 export interface Profile {
   displayName?: string
