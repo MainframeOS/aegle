@@ -14,6 +14,8 @@ import {
   uploadFile,
   createPeerPublisher,
   createPeerSubscriber,
+  readPeer,
+  writePeer,
   readPeerContact,
   writePeerContact,
   // channels
@@ -361,7 +363,7 @@ describe('protocols', () => {
       },
     })
 
-    const publish = createPeerPublisher(bzz, keyPair)
+    const publish = createPeerPublisher({ bzz, keyPair })
     await publish(peer)
   })
 
@@ -391,5 +393,214 @@ describe('protocols', () => {
       peerKey: aliceKeyPair.getPublic('hex'),
     })
     expect(receivedPeerContact).toEqual(sendPeerContact)
+  })
+
+  test('end-to-end flow', async () => {
+    jest.setTimeout(30000)
+
+    // Create key pairs for Alice and Bob
+    const aliceKeyPair = createKeyPair()
+    const aliceAddress = getPublicAddress(aliceKeyPair)
+    const bobKeyPair = createKeyPair()
+    const bobAddress = getPublicAddress(bobKeyPair)
+
+    // Alice and Bob publish their public peer data to advertise their public keys
+    await Promise.all([
+      writePeer(
+        { bzz, keyPair: aliceKeyPair },
+        {
+          profile: { displayName: 'Alice' },
+          publicKey: aliceKeyPair.getPublic('hex'),
+        },
+      ),
+      writePeer(
+        { bzz, keyPair: bobKeyPair },
+        {
+          profile: { displayName: 'Bob' },
+          publicKey: bobKeyPair.getPublic('hex'),
+        },
+      ),
+    ])
+
+    // Peer data can be loaded using their address after it's been published
+    const [alicePeer, bobPeer] = await Promise.all([
+      readPeer({ bzz, peer: aliceAddress }),
+      readPeer({ bzz, peer: bobAddress }),
+    ])
+    expect(alicePeer).toBeDefined()
+    expect(bobPeer).toBeDefined()
+
+    // Based on these advertised public keys, they can publish an encrypted peerContact payload
+    const aliceBobKeyPair = createKeyPair()
+    const bobAliceKeyPair = createKeyPair()
+    await Promise.all([
+      // Alice -> Bob
+      writePeerContact(
+        { bzz, keyPair: aliceKeyPair, peerKey: bobPeer.publicKey },
+        {
+          contactPublicKey: aliceBobKeyPair.getPublic('hex'),
+          peerAddress: aliceAddress,
+        },
+      ),
+      // Bob -> Alice
+      writePeerContact(
+        { bzz, keyPair: bobKeyPair, peerKey: alicePeer.publicKey },
+        {
+          contactPublicKey: bobAliceKeyPair.getPublic('hex'),
+          peerAddress: bobAddress,
+        },
+      ),
+    ])
+
+    // Both Alice and Bob can retrieve each other's contact public key, they will use for future exchanges
+    const [aliceBobPeerContact, bobAlicePeerContact] = await Promise.all([
+      readPeerContact({
+        bzz,
+        keyPair: aliceKeyPair,
+        peerKey: bobPeer.publicKey,
+      }),
+      readPeerContact({
+        bzz,
+        keyPair: bobKeyPair,
+        peerKey: alicePeer.publicKey,
+      }),
+    ])
+    expect(aliceBobPeerContact).toBeDefined()
+    expect(bobAlicePeerContact).toBeDefined()
+
+    // Create a FileSystem where Alice shares files with Bob
+    const aliceFilesKeyPair = createKeyPair()
+    const aliceBobFS = new FileSystemWriter({
+      bzz,
+      keyPair: aliceFilesKeyPair,
+      reader: aliceBobPeerContact.contactPublicKey,
+    })
+
+    await aliceBobFS.uploadFile('/readme.txt', 'Hello!', { encrypt: true })
+    // Push changes to Alice's FS and share the public key with Bob in their contact channel
+    await Promise.all([
+      aliceBobFS.push(),
+      writeContact(
+        {
+          bzz,
+          keyPair: aliceBobKeyPair,
+          contactKey: aliceBobPeerContact.contactPublicKey,
+        },
+        { fileSystemKey: aliceFilesKeyPair.getPublic('hex') },
+      ),
+    ])
+
+    // Bob can now read the contact information from Alice
+    const bobAliceContact = await readContact({
+      bzz,
+      keyPair: bobAliceKeyPair,
+      contactKey: bobAlicePeerContact.contactPublicKey,
+    })
+    expect(bobAliceContact).toBeDefined()
+    expect(bobAliceContact.fileSystemKey).toBeDefined()
+
+    // Bob can read from Alice's FileSystem and check the file
+    const bobAliceFS = new FileSystemReader({
+      bzz,
+      keyPair: bobAliceKeyPair,
+      writer: bobAliceContact.fileSystemKey,
+    })
+    await bobAliceFS.pull()
+    const fileFromAlice = bobAliceFS.getFile('/readme.txt')
+    expect(fileFromAlice).toBeDefined()
+
+    const chloeKeyPair = createKeyPair()
+    const chloeAddress = getPublicAddress(chloeKeyPair)
+    const chloeBobKeyPair = createKeyPair()
+
+    // Publish Chloe's peer and peerContact payloads using Bob's public key
+    await Promise.all([
+      writePeer(
+        { bzz, keyPair: chloeKeyPair },
+        {
+          profile: { displayName: 'Chloe' },
+          publicKey: chloeKeyPair.getPublic('hex'),
+        },
+      ),
+      writePeerContact(
+        { bzz, keyPair: chloeKeyPair, peerKey: bobPeer.publicKey },
+        {
+          contactPublicKey: chloeBobKeyPair.getPublic('hex'),
+          peerAddress: chloeAddress,
+        },
+      ),
+    ])
+
+    // Bob can access Chloe's peer and peerContact data
+    const chloePeer = await readPeer({ bzz, peer: chloeAddress })
+    expect(chloePeer).toBeDefined()
+
+    const bobChloePeerContact = await readPeerContact({
+      bzz,
+      keyPair: bobKeyPair,
+      peerKey: chloePeer.publicKey,
+    })
+    expect(bobChloePeerContact).toBeDefined()
+
+    // Create Bob -> Chloe mailbox and contact
+    const bobChloeKeyPair = createKeyPair()
+    const bobMailboxKeyPair = createKeyPair()
+    const publishMessage = createMailboxPublisher({
+      bzz,
+      keyPair: bobMailboxKeyPair,
+      reader: bobChloePeerContact.contactPublicKey,
+    })
+
+    await Promise.all([
+      publishMessage({
+        title: 'Hello',
+        body: 'See attachment',
+        attachments: [{ name: 'readme.txt', file: fileFromAlice }],
+      }),
+      writeContact(
+        {
+          bzz,
+          keyPair: bobChloeKeyPair,
+          contactKey: bobChloePeerContact.contactPublicKey,
+        },
+        { mailboxes: { outbox: bobMailboxKeyPair.getPublic('hex') } },
+      ),
+      writePeerContact(
+        { bzz, keyPair: bobKeyPair, peerKey: chloePeer.publicKey },
+        {
+          contactPublicKey: bobChloeKeyPair.getPublic('hex'),
+          peerAddress: bobAddress,
+        },
+      ),
+    ])
+
+    const chloeBobPeerContact = await readPeerContact({
+      bzz,
+      keyPair: chloeKeyPair,
+      peerKey: bobPeer.publicKey,
+    })
+    expect(chloeBobPeerContact).toBeDefined()
+    const chloeBobContact = await readContact({
+      bzz,
+      keyPair: chloeBobKeyPair,
+      contactKey: chloeBobPeerContact.contactPublicKey,
+    })
+    expect(chloeBobContact).toBeDefined()
+    expect(chloeBobContact.mailboxes).toBeDefined()
+
+    const reader = createMailboxReader({
+      bzz,
+      keyPair: chloeBobKeyPair,
+      writer: chloeBobContact.mailboxes.outbox,
+    })
+    const chapter = await reader.getLatestChapter()
+    expect(chapter).toBeDefined()
+
+    const attachment = chapter.content.data.attachments[0]
+    expect(attachment).toBeDefined()
+
+    const fileStream = await downloadFile(bzz, attachment.file)
+    const text = await getStream(fileStream)
+    expect(text).toBe('Hello!')
   })
 })

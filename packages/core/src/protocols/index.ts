@@ -14,7 +14,15 @@ export {
   downloadFile,
   uploadFile,
 } from './fileSystem'
-export { createPeerPublisher, createPeerSubscriber } from './peer'
+export {
+  PeerReaderParams,
+  PeerSubscriberParams,
+  PeerWriterParams,
+  createPeerPublisher,
+  createPeerSubscriber,
+  readPeer,
+  writePeer,
+} from './peer'
 export {
   createPeerContactSubscriber,
   readPeerContact,

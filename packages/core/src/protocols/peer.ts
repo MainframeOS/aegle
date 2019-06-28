@@ -6,12 +6,46 @@ import { Peer } from '../schemas/peer'
 import {
   createEntityFeedPublisher,
   createEntityFeedSubscriber,
+  readFeedEntity,
+  writeFeedEntity,
 } from '../channels'
 import { PEER_NAME } from '../namespace'
 
-export interface PeerSubscriberParams {
+export interface PeerReaderParams {
   bzz: Bzz<any>
   peer: string
+}
+
+export async function readPeer(params: PeerReaderParams): Promise<Peer | null> {
+  return await readFeedEntity({
+    bzz: params.bzz,
+    writer: params.peer,
+    entityType: PEER_NAME,
+    name: PEER_NAME,
+  })
+}
+
+export interface PeerWriterParams {
+  bzz: Bzz<any>
+  keyPair: any // TODO: keyPair type
+}
+
+export async function writePeer(
+  params: PeerWriterParams,
+  data: Peer,
+): Promise<string> {
+  return await writeFeedEntity(
+    {
+      bzz: params.bzz,
+      keyPair: params.keyPair,
+      entityType: PEER_NAME,
+      name: PEER_NAME,
+    },
+    data,
+  )
+}
+
+export interface PeerSubscriberParams extends PeerReaderParams {
   options: PollContentOptions
 }
 
@@ -31,12 +65,10 @@ export function createPeerSubscriber(
   }).pipe(map((payload: any) => payload.data))
 }
 
-// TODO: keyPair type
-export function createPeerPublisher(bzz: Bzz<any>, keyPair: any) {
+export function createPeerPublisher(params: PeerWriterParams) {
   return createEntityFeedPublisher<Peer>({
-    bzz,
+    ...params,
     entityType: PEER_NAME,
-    keyPair,
     name: PEER_NAME,
   })
 }

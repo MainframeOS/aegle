@@ -17,8 +17,13 @@ export {
   downloadFile,
   uploadFile,
   // Peer
+  PeerReaderParams,
+  PeerSubscriberParams,
+  PeerWriterParams,
   createPeerPublisher,
   createPeerSubscriber,
+  readPeer,
+  writePeer,
   // PeerContact
   createPeerContactSubscriber,
   readPeerContact,
