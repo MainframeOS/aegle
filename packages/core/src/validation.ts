@@ -6,11 +6,10 @@ import { getID } from './namespace'
 import { fromBuffer } from './utils'
 import { EntityPayload } from './types'
 
-import { contactSchema } from './schemas/contact'
+import { contactSchema, peerContactSchema } from './schemas/contact'
 import { messageSchema } from './schemas/messaging'
 import { fileSystemSchema } from './schemas/fileSystem'
 import { peerSchema } from './schemas/peer'
-import { peerContactSchema } from './schemas/peerContact'
 
 const ajv = new Ajv()
 ajv.addSchema([

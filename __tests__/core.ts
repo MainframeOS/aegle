@@ -208,33 +208,63 @@ describe('protocols', () => {
     signBytes: async (bytes, key) => sign(bytes, key),
   })
 
-  test('contact', async () => {
-    const aliceKeyPair = createKeyPair()
-    const bobKeyPair = createKeyPair()
+  describe('contact protocols', () => {
+    test('peerContact', async () => {
+      const aliceKeyPair = createKeyPair()
+      const bobKeyPair = createKeyPair()
 
-    const sendContact = {
-      profile: {
-        displayName: 'Alice',
-      },
-    }
+      const sendPeerContact = {
+        contactPublicKey: createKeyPair().getPublic('hex'),
+        peerAddress: getPublicAddress(aliceKeyPair),
+      }
 
-    // Write Alice -> Bob contact using Alice's private key and Bob's public key
-    await writeContact(
-      {
+      // Write Alice -> Bob peerContact using Alice's private key and Bob's public key
+      await writePeerContact(
+        {
+          bzz,
+          keyPair: aliceKeyPair,
+          peerKey: bobKeyPair.getPublic('hex'),
+        },
+        sendPeerContact,
+      )
+
+      // Read Alice -> Bob peerContact using Alice's public key and Bob's private key
+      const receivedPeerContact = await readPeerContact({
         bzz,
-        keyPair: aliceKeyPair,
-        contactKey: bobKeyPair.getPublic('hex'),
-      },
-      sendContact,
-    )
-
-    // Read Alice -> Bob contact using Alice's public key and Bob's private key
-    const receivedContact = await readContact({
-      bzz,
-      keyPair: bobKeyPair,
-      contactKey: aliceKeyPair.getPublic('hex'),
+        keyPair: bobKeyPair,
+        peerKey: aliceKeyPair.getPublic('hex'),
+      })
+      expect(receivedPeerContact).toEqual(sendPeerContact)
     })
-    expect(receivedContact).toEqual(sendContact)
+
+    test('contact', async () => {
+      const aliceKeyPair = createKeyPair()
+      const bobKeyPair = createKeyPair()
+
+      const sendContact = {
+        profile: {
+          displayName: 'Alice',
+        },
+      }
+
+      // Write Alice -> Bob contact using Alice's private key and Bob's public key
+      await writeContact(
+        {
+          bzz,
+          keyPair: aliceKeyPair,
+          contactKey: bobKeyPair.getPublic('hex'),
+        },
+        sendContact,
+      )
+
+      // Read Alice -> Bob contact using Alice's public key and Bob's private key
+      const receivedContact = await readContact({
+        bzz,
+        keyPair: bobKeyPair,
+        contactKey: aliceKeyPair.getPublic('hex'),
+      })
+      expect(receivedContact).toEqual(sendContact)
+    })
   })
 
   test('messaging', async done => {
@@ -367,34 +397,6 @@ describe('protocols', () => {
     await publish(peer)
   })
 
-  test('peerContact', async () => {
-    const aliceKeyPair = createKeyPair()
-    const bobKeyPair = createKeyPair()
-
-    const sendPeerContact = {
-      contactPublicKey: createKeyPair().getPublic('hex'),
-      peerAddress: getPublicAddress(aliceKeyPair),
-    }
-
-    // Write Alice -> Bob peerContact using Alice's private key and Bob's public key
-    await writePeerContact(
-      {
-        bzz,
-        keyPair: aliceKeyPair,
-        peerKey: bobKeyPair.getPublic('hex'),
-      },
-      sendPeerContact,
-    )
-
-    // Read Alice -> Bob peerContact using Alice's public key and Bob's private key
-    const receivedPeerContact = await readPeerContact({
-      bzz,
-      keyPair: bobKeyPair,
-      peerKey: aliceKeyPair.getPublic('hex'),
-    })
-    expect(receivedPeerContact).toEqual(sendPeerContact)
-  })
-
   test('end-to-end flow', async () => {
     jest.setTimeout(30000)
 
@@ -476,8 +478,8 @@ describe('protocols', () => {
       reader: aliceBobPeerContact.contactPublicKey,
     })
 
+    // Push a file to Alice's FS and share the FS public key with Bob in their contact channel
     await aliceBobFS.uploadFile('/readme.txt', 'Hello!', { encrypt: true })
-    // Push changes to Alice's FS and share the public key with Bob in their contact channel
     await Promise.all([
       aliceBobFS.push(),
       writeContact(
@@ -509,6 +511,7 @@ describe('protocols', () => {
     const fileFromAlice = bobAliceFS.getFile('/readme.txt')
     expect(fileFromAlice).toBeDefined()
 
+    // Now let's add a third user, Chloe, who is going to interact with Bob
     const chloeKeyPair = createKeyPair()
     const chloeAddress = getPublicAddress(chloeKeyPair)
     const chloeBobKeyPair = createKeyPair()
@@ -531,7 +534,7 @@ describe('protocols', () => {
       ),
     ])
 
-    // Bob can access Chloe's peer and peerContact data
+    // Bob can now access Chloe's peer and peerContact data
     const chloePeer = await readPeer({ bzz, peer: chloeAddress })
     expect(chloePeer).toBeDefined()
 
@@ -555,6 +558,7 @@ describe('protocols', () => {
       publishMessage({
         title: 'Hello',
         body: 'See attachment',
+        // Bob is attaching the metadat of the file Alice shared with him
         attachments: [{ name: 'readme.txt', file: fileFromAlice }],
       }),
       writeContact(
@@ -574,6 +578,7 @@ describe('protocols', () => {
       ),
     ])
 
+    // Chloe reads Bob's peerContact and contact payloads
     const chloeBobPeerContact = await readPeerContact({
       bzz,
       keyPair: chloeKeyPair,
@@ -588,6 +593,7 @@ describe('protocols', () => {
     expect(chloeBobContact).toBeDefined()
     expect(chloeBobContact.mailboxes).toBeDefined()
 
+    // Chloe reads from the mailbox Bob has created and loads the message sent
     const reader = createMailboxReader({
       bzz,
       keyPair: chloeBobKeyPair,
@@ -599,6 +605,7 @@ describe('protocols', () => {
     const attachment = chapter.content.data.attachments[0]
     expect(attachment).toBeDefined()
 
+    // Chloe downloads the file originally shared by Alice
     const fileStream = await downloadFile(bzz, attachment.file)
     const text = await getStream(fileStream)
     expect(text).toBe('Hello!')

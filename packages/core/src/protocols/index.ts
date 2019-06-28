@@ -1,4 +1,11 @@
-export { createContactSubscriber, readContact, writeContact } from './contact'
+export {
+  createContactSubscriber,
+  createPeerContactSubscriber,
+  readContact,
+  readPeerContact,
+  writeContact,
+  writePeerContact,
+} from './contact'
 export {
   MailboxReaderParams,
   MailboxWriterParams,
@@ -23,8 +30,3 @@ export {
   readPeer,
   writePeer,
 } from './peer'
-export {
-  createPeerContactSubscriber,
-  readPeerContact,
-  writePeerContact,
-} from './peerContact'

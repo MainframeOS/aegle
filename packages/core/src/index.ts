@@ -1,8 +1,11 @@
 export {
   // Contact
   createContactSubscriber,
+  createPeerContactSubscriber,
   readContact,
+  readPeerContact,
   writeContact,
+  writePeerContact,
   // Messaging
   MailboxReaderParams,
   MailboxWriterParams,
@@ -24,10 +27,6 @@ export {
   createPeerSubscriber,
   readPeer,
   writePeer,
-  // PeerContact
-  createPeerContactSubscriber,
-  readPeerContact,
-  writePeerContact,
 } from './protocols'
 export { Peer, peerSchema } from './schemas/peer'
 export {
