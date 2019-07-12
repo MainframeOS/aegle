@@ -1,34 +1,22 @@
 export {
+  // Actor
+  ActorReaderParams,
+  ActorSubscriberParams,
+  ActorWriterParams,
+  actor,
   // Contact
-  createContactSubscriber,
-  createPeerContactSubscriber,
-  readContact,
-  readPeerContact,
-  writeContact,
-  writePeerContact,
+  contact,
   // Messaging
   MailboxReaderParams,
   MailboxWriterParams,
-  createMailboxPublisher,
-  createMailboxReader,
+  mailbox,
   // FileSystem
-  FileSystemReader,
   FileSystemReaderParams,
-  FileSystemWriter,
   FileSystemWriterParams,
   FileUploadParams,
-  downloadFile,
-  uploadFile,
-  // Peer
-  PeerReaderParams,
-  PeerSubscriberParams,
-  PeerWriterParams,
-  createPeerPublisher,
-  createPeerSubscriber,
-  readPeer,
-  writePeer,
+  fileSystem,
 } from './protocols'
-export { Peer, peerSchema } from './schemas/peer'
+export { Actor, actorSchema } from './schemas/actor'
 export {
   createEntityPublisher,
   getPublicAddress,

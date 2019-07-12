@@ -1,13 +1,14 @@
 import { Readable } from 'stream'
-import Bzz, {
+import {
+  Bzz,
   FeedParams,
   PollContentOptions,
   UploadOptions,
   getFeedTopic,
-} from '@erebos/api-bzz-base'
-import { hexValue } from '@erebos/hex'
-import { pubKeyToAddress } from '@erebos/keccak256'
-import { createPublic } from '@erebos/secp256k1'
+} from '@erebos/api-bzz-node'
+import { createHex, hexValue } from '@erebos/hex'
+import { hash, pubKeyToAddress } from '@erebos/keccak256'
+import { KeyPair, createPublic } from '@erebos/secp256k1'
 import {
   Chapter,
   PartialChapter,
@@ -19,7 +20,7 @@ import PQueue from 'p-queue'
 import { flatMap } from 'rxjs/operators'
 
 import { decodeEntityStream, encodePayload, getBodyStream } from './encoding'
-import { DecodeParams, EntityPayload, KeyPair } from './types'
+import { DecodeParams, EntityPayload } from './types'
 import { validateEntity } from './validation'
 
 export function createEntityPublisher<T, U>(
@@ -33,8 +34,7 @@ export function createEntityPublisher<T, U>(
   }
 }
 
-// TODO: KeyPair type
-export function getPublicAddress(keyPair: any): string {
+export function getPublicAddress(keyPair: KeyPair): string {
   return pubKeyToAddress(keyPair.getPublic('array'))
 }
 
@@ -46,7 +46,7 @@ export interface FeedReadParams {
 export function getFeedReadParams(
   writer: string, // Can be a public key (130 chars long) or an address
   name?: string,
-  keyPair?: any, // TODO: KeyPair type
+  keyPair?: KeyPair,
 ): FeedReadParams {
   const pubKey = writer.length === 130 ? createPublic(writer) : null
   const feed: FeedParams = {
@@ -60,10 +60,10 @@ export function getFeedReadParams(
         'writer argument must be a public key when keyPair is provided to derive the shared key',
       )
     }
-    encryptionKey = keyPair.derive(pubKey.getPublic()).toBuffer()
+    encryptionKey = keyPair.derive(pubKey.getPublic()).toBuffer() as Buffer
     feed.topic = getFeedTopic({
       name,
-      topic: getPublicAddress(keyPair),
+      topic: createHex(hash(encryptionKey)).value,
     })
   } else if (name != null) {
     feed.name = name
@@ -80,7 +80,7 @@ export interface FeedWriteParams extends FeedReadParams {
 }
 
 export function getFeedWriteParams(
-  keyPair: any, // TODO: KeyPair type
+  keyPair: KeyPair,
   name?: string,
   reader?: string,
 ): FeedWriteParams {
@@ -90,10 +90,10 @@ export function getFeedWriteParams(
   let encryptionKey: Buffer | undefined
   if (reader != null) {
     const pubKey = createPublic(reader)
-    encryptionKey = keyPair.derive(pubKey.getPublic()).toBuffer()
+    encryptionKey = keyPair.derive(pubKey.getPublic()).toBuffer() as Buffer
     feed.topic = getFeedTopic({
       name,
-      topic: getPublicAddress(pubKey),
+      topic: createHex(hash(encryptionKey)).value,
     })
   } else if (name != null) {
     feed.name = name
@@ -107,7 +107,7 @@ export function getFeedWriteParams(
 }
 
 export interface ChannelParams {
-  bzz: Bzz<any>
+  bzz: Bzz
   entityType: string
   name?: string
 }

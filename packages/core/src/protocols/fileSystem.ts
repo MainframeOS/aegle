@@ -1,5 +1,6 @@
 import { Readable } from 'stream'
-import Bzz from '@erebos/api-bzz-node'
+import { Bzz } from '@erebos/api-bzz-node'
+import { KeyPair } from '@erebos/secp256k1'
 import getStream from 'get-stream'
 import PQueue from 'p-queue'
 import { BehaviorSubject } from 'rxjs'
@@ -147,7 +148,7 @@ enum FileSystemPushSyncState {
 
 export interface FileSystemReaderParams extends FileSystemBaseParams {
   writer: string
-  keyPair?: any // TODO: keyPair type
+  keyPair?: KeyPair
 }
 
 // TODO: FileSystemReader class
@@ -196,7 +197,7 @@ export interface FileSystemChanges {
 }
 
 export interface FileSystemWriterParams extends FileSystemBaseParams {
-  keyPair: any // TODO: keyPair type
+  keyPair: KeyPair
   files?: FilesRecord
   reader?: string
 }
@@ -342,4 +343,13 @@ export class FileSystemWriter extends FileSystemBase {
     this.setLocalFiles({ ...this.files.value, [path]: file })
     return file
   }
+}
+
+// TODO: add and export createFileSystemReader and createFileSystemWriter
+
+export const fileSystem = {
+  downloadFile,
+  uploadFile,
+  Reader: FileSystemReader,
+  Writer: FileSystemWriter,
 }

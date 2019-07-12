@@ -1,4 +1,5 @@
-import Bzz from '@erebos/api-bzz-base'
+import { Bzz } from '@erebos/api-bzz-node'
+import { KeyPair } from '@erebos/secp256k1'
 
 import {
   createEntityReadTimeline,
@@ -7,8 +8,8 @@ import {
 import { MAILBOX_NAME, MESSAGE_NAME } from '../namespace'
 
 interface MailboxCommonParams {
-  bzz: Bzz<any>
-  keyPair: any // TODO: keyPair type
+  bzz: Bzz
+  keyPair: KeyPair
 }
 
 export interface MailboxReaderParams extends MailboxCommonParams {
@@ -33,4 +34,9 @@ export function createMailboxPublisher(params: MailboxWriterParams) {
     entityType: MESSAGE_NAME,
     name: MAILBOX_NAME,
   })
+}
+
+export const mailbox = {
+  createReader: createMailboxReader,
+  createPublisher: createMailboxPublisher,
 }

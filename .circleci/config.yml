@@ -26,16 +26,16 @@ jobs:
       - checkout
       - restore_cache:
           keys:
-            - v1-dependencies-{{ checksum "package.json" }}
+            - deps-{{ checksum "yarn.lock" }}
             # fallback to using the latest cache if no exact match is found
-            - v1-dependencies-
+            - deps
       - run:
           name: Setup
           command: yarn install
       - save_cache:
           paths:
             - node_modules
-          key: v1-dependencies-{{ checksum "package.json" }}
+          key: deps-{{ checksum "yarn.lock" }}
       - run:
           name: Project tests
           command: yarn test:ci

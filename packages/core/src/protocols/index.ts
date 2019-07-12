@@ -1,18 +1,31 @@
 export {
+  actor,
+  ActorReaderParams,
+  ActorSubscriberParams,
+  ActorWriterParams,
+  createActorPublisher,
+  createActorSubscriber,
+  readActor,
+  writeActor,
+} from './actor'
+export {
+  contact,
   createContactSubscriber,
-  createPeerContactSubscriber,
+  createFirstContactSubscriber,
   readContact,
-  readPeerContact,
+  readFirstContact,
   writeContact,
-  writePeerContact,
+  writeFirstContact,
 } from './contact'
 export {
+  mailbox,
   MailboxReaderParams,
   MailboxWriterParams,
   createMailboxReader,
   createMailboxPublisher,
-} from './messaging'
+} from './mailbox'
 export {
+  fileSystem,
   FileSystemReader,
   FileSystemReaderParams,
   FileSystemWriter,
@@ -21,12 +34,3 @@ export {
   downloadFile,
   uploadFile,
 } from './fileSystem'
-export {
-  PeerReaderParams,
-  PeerSubscriberParams,
-  PeerWriterParams,
-  createPeerPublisher,
-  createPeerSubscriber,
-  readPeer,
-  writePeer,
-} from './peer'

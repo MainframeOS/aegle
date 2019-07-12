@@ -6,18 +6,18 @@ import { getID } from './namespace'
 import { fromBuffer } from './utils'
 import { EntityPayload } from './types'
 
-import { contactSchema, peerContactSchema } from './schemas/contact'
-import { messageSchema } from './schemas/messaging'
+import { actorSchema } from './schemas/actor'
+import { contactSchema, firstContactSchema } from './schemas/contact'
 import { fileSystemSchema } from './schemas/fileSystem'
-import { peerSchema } from './schemas/peer'
+import { messageSchema } from './schemas/messaging'
 
 const ajv = new Ajv()
 ajv.addSchema([
+  actorSchema,
   contactSchema,
-  messageSchema,
+  firstContactSchema,
   fileSystemSchema,
-  peerSchema,
-  peerContactSchema,
+  messageSchema,
 ])
 
 export async function validateEntity<T = any>(

@@ -15,9 +15,9 @@ export function namespace(
   return `${NAMESPACE_PREFIX}.${name}.${version}`
 }
 
+export const ACTOR_NAME = namespace('actor')
 export const CONTACT_NAME = namespace('contact')
 export const FILE_SYSTEM_NAME = namespace('fileSystem')
+export const FIRST_CONTACT_NAME = namespace('firstContact')
 export const MAILBOX_NAME = namespace('mailbox')
 export const MESSAGE_NAME = namespace('message')
-export const PEER_NAME = namespace('peer')
-export const PEER_CONTACT_NAME = namespace('peerContact')

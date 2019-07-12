@@ -1,4 +1,4 @@
-import { CONTACT_NAME, PEER_CONTACT_NAME, getID } from '../namespace'
+import { CONTACT_NAME, FIRST_CONTACT_NAME, getID } from '../namespace'
 
 import { Mailboxes, mailboxesProperty } from './messaging'
 import { Profile, profileProperty } from './profile'
@@ -22,19 +22,19 @@ export const contactSchema = {
   additionalProperties: false,
 }
 
-export interface PeerContact {
+export interface FirstContact {
+  actorAddress: string
   contactPublicKey: string
-  peerAddress: string
 }
 
-export const peerContactSchema = {
+export const firstContactSchema = {
   $async: true,
-  $id: getID(PEER_CONTACT_NAME),
+  $id: getID(FIRST_CONTACT_NAME),
   type: 'object',
-  required: ['contactPublicKey', 'peerAddress'],
+  required: ['actorAddress', 'contactPublicKey'],
   properties: {
+    actorAddress: ethereumAddressProperty,
     contactPublicKey: publicKeyProperty,
-    peerAddress: ethereumAddressProperty,
   },
   additionalProperties: false,
 }

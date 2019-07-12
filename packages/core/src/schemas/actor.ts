@@ -1,16 +1,16 @@
-import { PEER_NAME, getID } from '../namespace'
+import { ACTOR_NAME, getID } from '../namespace'
 
 import { Profile, profileProperty } from './profile'
 import { publicKeyProperty } from './scalars'
 
-export interface Peer {
+export interface Actor {
   profile?: Profile
   publicKey: string
 }
 
-export const peerSchema = {
+export const actorSchema = {
   $async: true,
-  $id: getID(PEER_NAME),
+  $id: getID(ACTOR_NAME),
   type: 'object',
   required: ['publicKey'],
   properties: {

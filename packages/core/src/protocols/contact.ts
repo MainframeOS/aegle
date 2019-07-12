@@ -1,18 +1,19 @@
-import Bzz, { PollContentOptions } from '@erebos/api-bzz-base'
+import { Bzz, PollContentOptions } from '@erebos/api-bzz-node'
+import { KeyPair } from '@erebos/secp256k1'
 import { Observable } from 'rxjs'
 import { map } from 'rxjs/operators'
 
-import { Contact, PeerContact } from '../schemas/contact'
+import { Contact, FirstContact } from '../schemas/contact'
 import {
   createEntityFeedSubscriber,
   readFeedEntity,
   writeFeedEntity,
 } from '../channels'
-import { CONTACT_NAME, PEER_CONTACT_NAME } from '../namespace'
+import { CONTACT_NAME, FIRST_CONTACT_NAME } from '../namespace'
 
 export interface ContactParams {
-  bzz: Bzz<any>
-  keyPair: any // TODO: keyPair type
+  bzz: Bzz
+  keyPair: KeyPair
   contactKey: string
 }
 
@@ -65,57 +66,66 @@ export function createContactSubscriber(
   }).pipe(map((payload: any) => payload.data))
 }
 
-export interface PeerContactParams {
-  bzz: Bzz<any>
-  keyPair: any // TODO: keyPair type
-  peerKey: string
+export interface FirstContactParams {
+  actorKey: string
+  bzz: Bzz
+  keyPair: KeyPair
 }
 
-export async function readPeerContact(
-  params: PeerContactParams,
-): Promise<PeerContact | null> {
-  return await readFeedEntity<PeerContact>({
+export async function readFirstContact(
+  params: FirstContactParams,
+): Promise<FirstContact | null> {
+  return await readFeedEntity<FirstContact>({
     bzz: params.bzz,
-    entityType: PEER_CONTACT_NAME,
+    entityType: FIRST_CONTACT_NAME,
     keyPair: params.keyPair,
-    name: PEER_CONTACT_NAME,
-    writer: params.peerKey,
+    name: FIRST_CONTACT_NAME,
+    writer: params.actorKey,
   })
 }
 
-export async function writePeerContact(
-  params: PeerContactParams,
-  data: PeerContact,
+export async function writeFirstContact(
+  params: FirstContactParams,
+  data: FirstContact,
 ): Promise<string> {
-  return await writeFeedEntity<PeerContact>(
+  return await writeFeedEntity<FirstContact>(
     {
       bzz: params.bzz,
-      entityType: PEER_CONTACT_NAME,
+      entityType: FIRST_CONTACT_NAME,
       keyPair: params.keyPair,
-      name: PEER_CONTACT_NAME,
-      reader: params.peerKey,
+      name: FIRST_CONTACT_NAME,
+      reader: params.actorKey,
     },
     data,
   )
 }
 
-export interface PeerContactSubscriberParams extends PeerContactParams {
+export interface FirstContactSubscriberParams extends FirstContactParams {
   options: PollContentOptions
 }
 
-export function createPeerContactSubscriber(
-  params: PeerContactSubscriberParams,
-): Observable<PeerContact> {
-  return createEntityFeedSubscriber<PeerContact>({
+export function createFirstContactSubscriber(
+  params: FirstContactSubscriberParams,
+): Observable<FirstContact> {
+  return createEntityFeedSubscriber<FirstContact>({
     bzz: params.bzz,
-    entityType: PEER_CONTACT_NAME,
+    entityType: FIRST_CONTACT_NAME,
     keyPair: params.keyPair,
-    name: PEER_CONTACT_NAME,
+    name: FIRST_CONTACT_NAME,
     options: {
       whenEmpty: 'ignore',
       ...params.options,
       mode: 'raw',
     },
-    writer: params.peerKey,
+    writer: params.actorKey,
   }).pipe(map((payload: any) => payload.data))
+}
+
+export const contact = {
+  read: readContact,
+  write: writeContact,
+  createSubscriber: createContactSubscriber,
+  readFirstContact,
+  writeFirstContact,
+  createFirstContactSubscriber,
 }
