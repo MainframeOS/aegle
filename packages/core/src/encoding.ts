@@ -1,5 +1,3 @@
-import { Readable } from 'stream'
-
 import {
   AEGLE_BYTE,
   CRYPTO_ALGORITHM,
@@ -32,16 +30,16 @@ export function encodeHeaderSize(size: number): Buffer {
 }
 
 export async function getBodyStream(
-  stream: Readable,
+  stream: NodeJS.ReadableStream,
   params: DecodeParams = {},
-): Promise<Readable> {
+): Promise<NodeJS.ReadableStream> {
   return new Promise((resolve, reject): void => {
     stream.on('error', err => {
       reject(err)
     })
     stream.once('readable', () => {
       // Check control byte
-      const checkBuffer = stream.read(1)
+      const checkBuffer = stream.read(1) as Buffer
       if (!AEGLE_BYTE.equals(checkBuffer)) {
         reject(new Error('Invalid stream'))
         return
@@ -49,9 +47,11 @@ export async function getBodyStream(
 
       try {
         // Decode headers
-        const headerSize = decodeHeaderSize(stream.read(HEADER_SIZE_BYTES))
+        const headerSize = decodeHeaderSize(stream.read(
+          HEADER_SIZE_BYTES,
+        ) as Buffer)
         const headers: PayloadHeaders =
-          headerSize === 0 ? {} : fromBuffer(stream.read(headerSize))
+          headerSize === 0 ? {} : fromBuffer(stream.read(headerSize) as Buffer)
 
         if (
           headers.size != null &&
@@ -87,7 +87,7 @@ export async function getBodyStream(
 }
 
 export async function decodeEntityStream<T>(
-  stream: Readable,
+  stream: NodeJS.ReadableStream,
   params: DecodeParams = {},
 ): Promise<EntityPayload<T>> {
   const bodyStream = await getBodyStream(stream, params)

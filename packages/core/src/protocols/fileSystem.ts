@@ -31,7 +31,10 @@ export function isValidPath(path: string): boolean {
   return PATH_RE.test(path)
 }
 
-export async function downloadFile(bzz: Bzz, file: File): Promise<Readable> {
+export async function downloadFile(
+  bzz: Bzz,
+  file: File,
+): Promise<NodeJS.ReadableStream> {
   const res = await bzz.download(file.hash, {
     mode: 'raw',
     contentType: file.contentType,
@@ -114,7 +117,7 @@ export abstract class FileSystemBase {
     return this.files.value[path] || null
   }
 
-  public async downloadFile(path: string): Promise<Readable> {
+  public async downloadFile(path: string): Promise<NodeJS.ReadableStream> {
     const file = this.files.value[path]
     if (file == null) {
       throw new Error('File not found')

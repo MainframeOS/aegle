@@ -26,7 +26,7 @@ import {
   // encoding
   encodeHeaderSize,
   decodeHeaderSize,
-} from '../packages/core/src'
+} from '../packages/core'
 
 describe('channels', () => {
   test('getPublicAddress() returns the address from a KeyPair', () => {

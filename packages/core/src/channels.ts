@@ -1,5 +1,5 @@
-import { Readable } from 'stream'
 import {
+  BaseResponse,
   Bzz,
   FeedParams,
   PollContentOptions,
@@ -17,6 +17,7 @@ import {
 } from '@erebos/timeline'
 import getStream from 'get-stream'
 import PQueue from 'p-queue'
+import { Observable } from 'rxjs'
 import { flatMap } from 'rxjs/operators'
 
 import { decodeEntityStream, encodePayload, getBodyStream } from './encoding'
@@ -222,7 +223,9 @@ export interface SubscriberParams extends ReaderParams {
   options: PollContentOptions
 }
 
-export function createEntityFeedSubscriber<T>(params: SubscriberParams) {
+export function createEntityFeedSubscriber<T>(
+  params: SubscriberParams,
+): Observable<EntityPayload<T> | null> {
   const { feed, encryptionKey } = getFeedReadParams(
     params.writer,
     params.name,
@@ -239,7 +242,7 @@ export function createEntityFeedSubscriber<T>(params: SubscriberParams) {
 }
 
 export function createEntityTimelineDecoder(params?: DecodeParams) {
-  return async function decode(res: Readable) {
+  return async function decode(res: BaseResponse<NodeJS.ReadableStream>) {
     const stream = await getBodyStream(res.body, params)
     const body = await getStream(stream)
     const chapter = validateChapter(JSON.parse(body))

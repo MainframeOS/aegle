@@ -1,0 +1,51 @@
+{
+  "plugins": ["@babel/plugin-transform-runtime"],
+  "presets": ["@babel/preset-typescript"],
+  "env": {
+    "browser-cjs": {
+      "presets": [
+        [
+          "@babel/preset-env",
+          {
+            "targets": {
+              "browsers": ["last 2 versions"]
+            },
+            "modules": "commonjs",
+            "loose": true
+          }
+        ]
+      ]
+    },
+    "browser-esm": {
+      "plugins": [
+        ["@babel/plugin-transform-runtime", { "useESModules": true }]
+      ],
+      "presets": [
+        [
+          "@babel/preset-env",
+          {
+            "targets": {
+              "browsers": ["last 2 versions"]
+            },
+            "modules": false,
+            "loose": true
+          }
+        ]
+      ]
+    },
+    "node": {
+      "presets": [
+        [
+          "@babel/preset-env",
+          {
+            "targets": {
+              "node": 10
+            },
+            "modules": "commonjs",
+            "loose": true
+          }
+        ]
+      ]
+    }
+  }
+}

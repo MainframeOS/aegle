@@ -1,5 +1,4 @@
-import { Readable } from 'stream'
-import * as Ajv from 'ajv'
+import Ajv from 'ajv'
 import getStream from 'get-stream'
 
 import { getID } from './namespace'
@@ -34,7 +33,7 @@ export async function validateBuffer<T = any>(
 }
 
 export async function validateStream<T = any>(
-  stream: Readable,
+  stream: NodeJS.ReadableStream,
 ): Promise<EntityPayload<T>> {
   const buffer = await getStream.buffer(stream)
   return await validateBuffer<T>(buffer)
