@@ -1,10 +1,10 @@
 import { MESSAGE_NAME, getID } from '../namespace'
 
-import { File, fileProperty } from './fileSystem'
+import { FileData, fileProperty } from './fileSystem'
 import { publicKeyProperty, swarmHashProperty } from './scalars'
 
-export interface MessageAttachment {
-  file: File
+export interface MessageAttachmentData {
+  file: FileData
   name?: string
 }
 
@@ -17,9 +17,9 @@ export const messageAttachmentProperty = {
   },
 }
 
-export interface Message {
+export interface MessageData {
   body: string
-  attachments?: Array<MessageAttachment>
+  attachments?: Array<MessageAttachmentData>
   replyTo?: string
   thread?: string
   title?: string
@@ -42,7 +42,7 @@ export const messageSchema = {
   },
 }
 
-export type Mailboxes = Record<string, string>
+export type MailboxesRecord = Record<string, string>
 
 export const mailboxesProperty = {
   type: 'object',

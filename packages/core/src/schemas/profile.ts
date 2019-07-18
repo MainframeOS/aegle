@@ -1,6 +1,6 @@
 import { ethereumAddressProperty } from './scalars'
 
-export interface Profile {
+export interface ProfileData {
   displayName?: string
   walletAddress?: string
 }

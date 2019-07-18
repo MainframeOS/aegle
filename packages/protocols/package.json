@@ -1,7 +1,7 @@
 {
-  "name": "@aegle/core",
+  "name": "@aegle/protocols",
   "version": "0.1.0",
-  "description": "Aegle core",
+  "description": "Aegle protocols",
   "repository": "git@github.com:MainframeHQ/aegle.git",
   "main": "lib/index.js",
   "types": "types/index.d.ts",
@@ -20,8 +20,7 @@
     "prepublishOnly": "yarn build"
   },
   "dependencies": {
-    "@erebos/api-bzz-node": "^0.9.0",
-    "ajv": "^6.10.2",
-    "get-stream": "^5.1.0"
+    "@aegle/core": "^0.1.0",
+    "@aegle/sync": "^0.1.0"
   }
 }

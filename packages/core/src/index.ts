@@ -1,39 +1,71 @@
-export {
-  // Actor
-  ActorReaderParams,
-  ActorSubscriberParams,
-  ActorWriterParams,
-  actor,
-  // Contact
-  contact,
-  // Messaging
-  MailboxReaderParams,
-  MailboxWriterParams,
-  mailbox,
-  // FileSystem
-  FileSystemReaderParams,
-  FileSystemWriterParams,
-  FileUploadParams,
-  fileSystem,
-} from './protocols'
-export { Actor, actorSchema } from './schemas/actor'
-export {
-  createEntityPublisher,
-  getPublicAddress,
-  getFeedReadParams,
-  getFeedWriteParams,
-} from './channels'
-export {
-  CRYPTO_KEY_LENGTH,
-  HEADER_SIZE_BYTES,
-  HEADER_MAX_SIZE,
-} from './constants'
-export {
-  createKey,
-  createRandomBytes,
-  decrypt,
-  decryptJSON,
-  encrypt,
-  encryptJSON,
-} from './crypto'
-export { decodeHeaderSize, encodeHeaderSize } from './encoding'
+import ajv from 'ajv'
+import getStream from 'get-stream'
+
+import { encodePayload, getBodyStream } from './encoding'
+import { getID } from './namespace'
+import { fromBuffer } from './utils'
+import { DecodeParams, EncodeParams, EntityPayload } from './types'
+
+import { actorSchema } from './schemas/actor'
+import { contactSchema, firstContactSchema } from './schemas/contact'
+import { fileSystemSchema } from './schemas/fileSystem'
+import { messageSchema } from './schemas/messaging'
+
+export * from './schemas'
+export * from './constants'
+export * from './crypto'
+export * from './encoding'
+export * from './namespace'
+export * from './types'
+
+export class AegleCore {
+  private ajv: ajv.Ajv
+
+  public constructor() {
+    this.ajv = ajv()
+    this.ajv.addSchema([
+      actorSchema,
+      contactSchema,
+      firstContactSchema,
+      fileSystemSchema,
+      messageSchema,
+    ])
+  }
+
+  public async validateEntity<T = any>(
+    entity: EntityPayload<T>,
+  ): Promise<EntityPayload<T>> {
+    await this.ajv.validate(getID(entity.type), entity.data)
+    return entity
+  }
+
+  public async validateBuffer<T = any>(
+    buffer: Buffer,
+  ): Promise<EntityPayload<T>> {
+    return await this.validateEntity<T>(fromBuffer(buffer))
+  }
+
+  public async validateStream<T = any>(
+    stream: NodeJS.ReadableStream,
+  ): Promise<EntityPayload<T>> {
+    const buffer = await getStream.buffer(stream)
+    return await this.validateBuffer<T>(buffer)
+  }
+
+  public async decodeEntityStream<T>(
+    stream: NodeJS.ReadableStream,
+    params: DecodeParams = {},
+  ): Promise<EntityPayload<T>> {
+    const bodyStream = await getBodyStream(stream, params)
+    return await this.validateStream(bodyStream)
+  }
+
+  public async encodeEntity(
+    type: string,
+    data: any,
+    params: EncodeParams = {},
+  ): Promise<Buffer> {
+    const payload = await this.validateEntity({ type, data })
+    return await encodePayload(payload, params)
+  }
+}

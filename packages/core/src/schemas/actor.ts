@@ -1,10 +1,10 @@
 import { ACTOR_NAME, getID } from '../namespace'
 
-import { Profile, profileProperty } from './profile'
+import { ProfileData, profileProperty } from './profile'
 import { publicKeyProperty } from './scalars'
 
-export interface Actor {
-  profile?: Profile
+export interface ActorData {
+  profile?: ProfileData
   publicKey: string
 }
 

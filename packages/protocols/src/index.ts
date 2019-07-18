@@ -1,15 +1,13 @@
 export {
-  actor,
   ActorReaderParams,
   ActorSubscriberParams,
   ActorWriterParams,
-  createActorPublisher,
+  createActorWriter,
   createActorSubscriber,
   readActor,
   writeActor,
 } from './actor'
 export {
-  contact,
   createContactSubscriber,
   createFirstContactSubscriber,
   readContact,
@@ -18,14 +16,6 @@ export {
   writeFirstContact,
 } from './contact'
 export {
-  mailbox,
-  MailboxReaderParams,
-  MailboxWriterParams,
-  createMailboxReader,
-  createMailboxPublisher,
-} from './mailbox'
-export {
-  fileSystem,
   FileSystemReader,
   FileSystemReaderParams,
   FileSystemWriter,
@@ -34,3 +24,9 @@ export {
   downloadFile,
   uploadFile,
 } from './fileSystem'
+export {
+  MailboxReaderParams,
+  MailboxWriterParams,
+  createMailboxReader,
+  createMailboxWriter,
+} from './messaging'

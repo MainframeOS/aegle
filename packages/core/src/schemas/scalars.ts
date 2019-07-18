@@ -1,4 +1,4 @@
-import { FeedParams } from '@erebos/api-bzz-base'
+import { FeedParams } from '@erebos/api-bzz-node'
 
 export const ethereumAddressProperty = {
   type: 'string',

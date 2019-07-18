@@ -1,13 +1,13 @@
 import { CONTACT_NAME, FIRST_CONTACT_NAME, getID } from '../namespace'
 
-import { Mailboxes, mailboxesProperty } from './messaging'
-import { Profile, profileProperty } from './profile'
+import { MailboxesRecord, mailboxesProperty } from './messaging'
+import { ProfileData, profileProperty } from './profile'
 import { ethereumAddressProperty, publicKeyProperty } from './scalars'
 
-export interface Contact {
+export interface ContactData {
   fileSystemKey?: string
-  mailboxes?: Mailboxes
-  profile?: Profile
+  mailboxes?: MailboxesRecord
+  profile?: ProfileData
 }
 
 export const contactSchema = {
@@ -22,7 +22,7 @@ export const contactSchema = {
   additionalProperties: false,
 }
 
-export interface FirstContact {
+export interface FirstContactData {
   actorAddress: string
   contactPublicKey: string
 }

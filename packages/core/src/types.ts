@@ -36,10 +36,3 @@ export interface EncodeParams {
   algorithm?: string
   key?: Buffer
 }
-
-export enum ResourceProtocol {
-  BzzHash = 'bzz.hash',
-  BzzFeed = 'bzz.feed',
-  TimelineChapter = 'timeline.chapter',
-  TimelineFeed = 'timeline.feed',
-}

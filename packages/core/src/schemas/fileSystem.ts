@@ -3,7 +3,7 @@ import { EncryptionParams } from '../types'
 
 import { swarmHashProperty } from './scalars'
 
-export interface FileEncryption extends EncryptionParams {
+export interface FileEncryptionData extends EncryptionParams {
   key: string
 }
 
@@ -23,9 +23,9 @@ export interface FileMetadata {
   size?: number
 }
 
-export interface File extends FileMetadata {
+export interface FileData extends FileMetadata {
   hash: string
-  encryption?: FileEncryption
+  encryption?: FileEncryptionData
 }
 
 export const fileProperty = {
@@ -40,13 +40,13 @@ export const fileProperty = {
 }
 
 // Nested files and folders tree (keys are relative paths)
-export interface Folder {
-  files?: Record<string, File>
-  folders?: Record<string, Folder>
+export interface FolderData {
+  files?: Record<string, FileData>
+  folders?: Record<string, FolderData>
 }
 
 // Flattened list of files (keys are absolute paths)
-export type FilesRecord = Record<string, File>
+export type FilesRecord = Record<string, FileData>
 
 // Useful reference: https://json-schema.org/learn/file-system.html
 export const fileSystemProperty = {
@@ -57,7 +57,7 @@ export const fileSystemProperty = {
   additionalProperties: false,
 }
 
-export interface FileSystem {
+export interface FileSystemData {
   files: FilesRecord
 }
 

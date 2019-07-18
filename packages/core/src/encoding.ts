@@ -5,14 +5,8 @@ import {
   HEADER_SIZE_BYTES,
 } from './constants'
 import { createDecipher, encryptJSON } from './crypto'
-import {
-  DecodeParams,
-  EncodeParams,
-  EntityPayload,
-  PayloadHeaders,
-} from './types'
+import { DecodeParams, EncodeParams, PayloadHeaders } from './types'
 import { CheckMaxSize, fromBuffer, toBuffer } from './utils'
-import { validateEntity, validateStream } from './validation'
 
 export function decodeHeaderSize(buffer: Buffer): number {
   if (buffer.length !== HEADER_SIZE_BYTES) {
@@ -86,14 +80,6 @@ export async function getBodyStream(
   })
 }
 
-export async function decodeEntityStream<T>(
-  stream: NodeJS.ReadableStream,
-  params: DecodeParams = {},
-): Promise<EntityPayload<T>> {
-  const bodyStream = await getBodyStream(stream, params)
-  return await validateStream(bodyStream)
-}
-
 export async function encodePayload(
   payload: any,
   params: EncodeParams = {},
@@ -121,13 +107,4 @@ export async function encodePayload(
     headersBuffer,
     body,
   ])
-}
-
-export async function encodeEntity(
-  type: string,
-  data: any,
-  params: EncodeParams = {},
-): Promise<Buffer> {
-  const payload = await validateEntity({ type, data })
-  return await encodePayload(payload, params)
 }

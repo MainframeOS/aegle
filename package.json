@@ -1,6 +1,6 @@
 {
   "name": "aegle",
-  "version": "1.0.0",
+  "version": "0.0.0",
   "description": "Data formats and protocols over Swarm",
   "repository": "git@github.com:MainframeHQ/aegle.git",
   "main": "index.js",
@@ -25,12 +25,14 @@
     "start": "yarn build && yarn test"
   },
   "devDependencies": {
-    "@babel/cli": "^7.0.0",
-    "@babel/core": "^7.1.6",
-    "@babel/plugin-transform-runtime": "^7.0.0",
-    "@babel/preset-env": "^7.1.6",
+    "@babel/cli": "^7.5.0",
+    "@babel/core": "^7.5.4",
+    "@babel/plugin-transform-runtime": "^7.5.0",
+    "@babel/preset-env": "^7.5.4",
     "@babel/preset-typescript": "^7.3.3",
     "@types/jest": "^24.0.15",
+    "@typescript-eslint/eslint-plugin": "^1.12.0",
+    "@typescript-eslint/parser": "^1.12.0",
     "babel-eslint": "^10.0.2",
     "babel-jest": "^24.1.0",
     "del-cli": "^2.0.0",
@@ -42,7 +44,6 @@
     "lerna": "^3.15.0",
     "prettier": "^1.18.2",
     "ts-jest": "^24.0.2",
-    "typescript": "^3.5.2",
-    "typescript-eslint-parser": "^22.0.0"
+    "typescript": "^3.5.2"
   }
 }

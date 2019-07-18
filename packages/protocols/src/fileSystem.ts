@@ -1,25 +1,23 @@
 import { Readable } from 'stream'
-import { Bzz } from '@erebos/api-bzz-node'
+import {
+  CRYPTO_ALGORITHM,
+  FILE_SYSTEM_NAME,
+  FileData,
+  FileMetadata,
+  FilesRecord,
+  FileSystemData,
+  createCipher,
+  createDecipher,
+  createKey,
+  encodePayload,
+  encrypt,
+} from '@aegle/core'
+import { AegleSync, FeedWriteParams, getFeedWriteParams } from '@aegle/sync'
+
 import { KeyPair } from '@erebos/secp256k1'
 import getStream from 'get-stream'
 import PQueue from 'p-queue'
 import { BehaviorSubject } from 'rxjs'
-
-import {
-  FeedWriteParams,
-  createEntityFeedReader,
-  getFeedWriteParams,
-} from '../channels'
-import { CRYPTO_ALGORITHM } from '../constants'
-import { createCipher, createDecipher, createKey, encrypt } from '../crypto'
-import { decodeEntityStream, encodePayload } from '../encoding'
-import { FILE_SYSTEM_NAME } from '../namespace'
-import {
-  File,
-  FileMetadata,
-  FilesRecord,
-  FileSystem,
-} from '../schemas/fileSystem'
 
 const PATH_RE = new RegExp('^(/[^/]+)+$', 'i')
 
@@ -32,10 +30,10 @@ export function isValidPath(path: string): boolean {
 }
 
 export async function downloadFile(
-  bzz: Bzz,
-  file: File,
+  sync: AegleSync,
+  file: FileData,
 ): Promise<NodeJS.ReadableStream> {
-  const res = await bzz.download(file.hash, {
+  const res = await sync.bzz.download(file.hash, {
     mode: 'raw',
     contentType: file.contentType,
   })
@@ -48,19 +46,19 @@ export async function downloadFile(
 }
 
 export async function uploadFile(
-  bzz: Bzz,
+  sync: AegleSync,
   data: string | Buffer | Readable | Record<string, any>,
   params: FileUploadParams = {},
-): Promise<File> {
+): Promise<FileData> {
   const key = params.encrypt ? await createKey() : null
   let hash, encryption, size
 
   if (data instanceof Readable) {
     if (key === null) {
-      hash = await bzz.uploadFileStream(data)
+      hash = await sync.bzz.uploadFileStream(data)
     } else {
       const { cipher, iv } = await createCipher(CRYPTO_ALGORITHM, key)
-      hash = await bzz.uploadFileStream(data.pipe(cipher))
+      hash = await sync.bzz.uploadFileStream(data.pipe(cipher))
       encryption = {
         algorithm: CRYPTO_ALGORITHM,
         authTag: cipher.getAuthTag().toString('base64'),
@@ -80,10 +78,10 @@ export async function uploadFile(
     size = params.size || contents.length
 
     if (key === null) {
-      hash = await bzz.uploadFile(contents)
+      hash = await sync.bzz.uploadFile(contents)
     } else {
       const payload = await encrypt(CRYPTO_ALGORITHM, key, contents)
-      hash = await bzz.uploadFile(payload.data)
+      hash = await sync.bzz.uploadFile(payload.data)
       encryption = { ...payload.params, key: key.toString('base64') }
     }
   }
@@ -96,24 +94,25 @@ export async function uploadFile(
   }
 }
 
-interface FileSystemBaseParams {
-  bzz: Bzz
+export interface FileSystemParams {
+  sync: AegleSync
+  files?: FilesRecord
 }
 
-export abstract class FileSystemBase {
-  protected bzz: Bzz
+export class FileSystem {
+  protected sync: AegleSync
   public files: BehaviorSubject<FilesRecord>
 
-  public constructor(bzz: Bzz, files: FilesRecord) {
-    this.bzz = bzz
-    this.files = new BehaviorSubject(files)
+  public constructor(params: FileSystemParams) {
+    this.sync = params.sync
+    this.files = new BehaviorSubject(params.files || {})
   }
 
   public hasFile(path: string): boolean {
     return this.files.value[path] != null
   }
 
-  public getFile(path: string): File | null {
+  public getFile(path: string): FileData | null {
     return this.files.value[path] || null
   }
 
@@ -122,7 +121,7 @@ export abstract class FileSystemBase {
     if (file == null) {
       throw new Error('File not found')
     }
-    return await downloadFile(this.bzz, file)
+    return await downloadFile(this.sync, file)
   }
 
   public async downloadText(path: string): Promise<string> {
@@ -149,28 +148,24 @@ enum FileSystemPushSyncState {
   FAILED,
 }
 
-export interface FileSystemReaderParams extends FileSystemBaseParams {
+export interface FileSystemReaderParams extends FileSystemParams {
   writer: string
   keyPair?: KeyPair
 }
 
-// TODO: FileSystemReader class
-// subscribes to the feed at given interval to update local state
-
-export class FileSystemReader extends FileSystemBase {
-  private read: () => Promise<FileSystem | null>
+export class FileSystemReader extends FileSystem {
+  private read: () => Promise<FileSystemData | null>
 
   public pullSync: BehaviorSubject<FileSystemPullSyncState>
 
   public constructor(params: FileSystemReaderParams) {
-    super(params.bzz, {})
+    super(params)
 
     this.pullSync = new BehaviorSubject(
       FileSystemPullSyncState.PENDING as FileSystemPullSyncState,
     )
 
-    this.read = createEntityFeedReader<FileSystem>({
-      bzz: params.bzz,
+    this.read = this.sync.createFeedReader<FileSystemData>({
       writer: params.writer,
       keyPair: params.keyPair,
       entityType: FILE_SYSTEM_NAME,
@@ -199,13 +194,13 @@ export interface FileSystemChanges {
   timestamp: number
 }
 
-export interface FileSystemWriterParams extends FileSystemBaseParams {
+export interface FileSystemWriterParams extends FileSystemParams {
   keyPair: KeyPair
   files?: FilesRecord
   reader?: string
 }
 
-export class FileSystemWriter extends FileSystemBase {
+export class FileSystemWriter extends FileSystem {
   private feedParams: FeedWriteParams
   private publishQueue: PQueue
 
@@ -214,7 +209,7 @@ export class FileSystemWriter extends FileSystemBase {
   public pushSync: BehaviorSubject<FileSystemPushSyncState>
 
   public constructor(params: FileSystemWriterParams) {
-    super(params.bzz, params.files == null ? {} : params.files)
+    super(params)
 
     this.feedParams = getFeedWriteParams(
       params.keyPair,
@@ -245,13 +240,10 @@ export class FileSystemWriter extends FileSystemBase {
     this.pushSync.next(FileSystemPushSyncState.PUSHING)
     try {
       const payload = await encodePayload(
-        {
-          type: FILE_SYSTEM_NAME,
-          data: { files: this.files.value },
-        },
+        { type: FILE_SYSTEM_NAME, data: { files: this.files.value } },
         { key: this.feedParams.encryptionKey },
       )
-      await this.bzz.setFeedContent(
+      await this.sync.bzz.setFeedContent(
         this.feedParams.feed,
         payload,
         undefined,
@@ -271,13 +263,13 @@ export class FileSystemWriter extends FileSystemBase {
         throw new Error('FileSystemWriter is already being initialized')
       default: {
         try {
-          const res = await this.bzz.getFeedContent(this.feedParams.feed, {
+          const res = await this.sync.bzz.getFeedContent(this.feedParams.feed, {
             mode: 'raw',
           })
           if (res != null) {
-            const payload = await decodeEntityStream<FileSystem>(res.body, {
-              key: this.feedParams.encryptionKey,
-            })
+            const payload = await this.sync.core.decodeEntityStream<
+              FileSystemData
+            >(res.body, { key: this.feedParams.encryptionKey })
             this.files.next(payload.data.files)
           }
           this.pullSync.next(FileSystemPullSyncState.DONE)
@@ -305,7 +297,7 @@ export class FileSystemWriter extends FileSystemBase {
     // TODO: should there be a "sync strategy" to automatically sync at a given interval, or when any change is made?
   }
 
-  public setFile(path: string, file: File): void {
+  public setFile(path: string, file: FileData): void {
     if (!isValidPath(path)) {
       throw new Error('Invalid path')
     }
@@ -338,21 +330,12 @@ export class FileSystemWriter extends FileSystemBase {
     path: string,
     data: string | Buffer | Readable | Record<string, any>,
     params?: FileUploadParams,
-  ): Promise<File> {
+  ): Promise<FileData> {
     if (!isValidPath(path)) {
       throw new Error('Invalid path')
     }
-    const file = await uploadFile(this.bzz, data, params)
+    const file = await uploadFile(this.sync, data, params)
     this.setLocalFiles({ ...this.files.value, [path]: file })
     return file
   }
-}
-
-// TODO: add and export createFileSystemReader and createFileSystemWriter
-
-export const fileSystem = {
-  downloadFile,
-  uploadFile,
-  Reader: FileSystemReader,
-  Writer: FileSystemWriter,
 }
