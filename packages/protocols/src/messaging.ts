@@ -1,4 +1,4 @@
-import { MAILBOX_NAME, MESSAGE_NAME } from '@aegle/core'
+import { MAILBOX_NAME, MESSAGE_NAME, MessageData } from '@aegle/core'
 import { AegleSync } from '@aegle/sync'
 import { KeyPair } from '@erebos/secp256k1'
 
@@ -12,7 +12,7 @@ export interface MailboxReaderParams extends MailboxParams {
 }
 
 export function createMailboxReader(params: MailboxReaderParams) {
-  return params.sync.createReadTimeline({
+  return params.sync.createReadTimeline<MessageData>({
     keyPair: params.keyPair,
     writer: params.writer,
     entityType: MESSAGE_NAME,
@@ -25,7 +25,7 @@ export interface MailboxWriterParams extends MailboxParams {
 }
 
 export function createMailboxWriter(params: MailboxWriterParams) {
-  return params.sync.createTimelinePublisher({
+  return params.sync.createTimelinePublisher<MessageData>({
     keyPair: params.keyPair,
     reader: params.reader,
     entityType: MESSAGE_NAME,
