@@ -11,7 +11,7 @@ import {
   // encoding
   encodeHeaderSize,
   decodeHeaderSize,
-} from '../packages/core'
+} from '@aegle/core'
 
 describe('core', () => {
   describe('crypto', () => {

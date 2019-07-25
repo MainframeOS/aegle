@@ -4,11 +4,11 @@ import { hash } from '@erebos/keccak256'
 import { createKeyPair } from '@erebos/secp256k1'
 
 import {
-  AegleSync,
+  Sync,
   getFeedReadParams,
   getFeedWriteParams,
   getPublicAddress,
-} from '../packages/sync'
+} from '@aegle/sync'
 
 describe('sync', () => {
   test('getPublicAddress() returns the address from a KeyPair', () => {
@@ -102,5 +102,5 @@ describe('sync', () => {
     })
   })
 
-  test.todo('AegleSync')
+  test.todo('Sync class')
 })

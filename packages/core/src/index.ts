@@ -18,7 +18,7 @@ export * from './encoding'
 export * from './namespace'
 export * from './types'
 
-export class AegleCore {
+export class Core {
   private ajv: ajv.Ajv
 
   public constructor() {

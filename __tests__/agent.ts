@@ -2,8 +2,8 @@ import { Bzz } from '@erebos/api-bzz-node'
 import { createKeyPair, sign } from '@erebos/secp256k1'
 import getStream from 'get-stream'
 
-import { AegleCore } from '../packages/core'
-import { AegleSync, getPublicAddress } from '../packages/sync'
+import { Core } from '@aegle/core'
+import { Sync, getPublicAddress } from '@aegle/sync'
 import {
   createActorSubscriber,
   createActorWriter,
@@ -19,15 +19,15 @@ import {
   downloadFile,
   FileSystemWriter,
   FileSystemReader,
-} from '../packages/protocols'
+} from '@aegle/agent'
 
 describe('protocols', () => {
   const bzz = new Bzz({
     url: 'http://localhost:8500',
     signBytes: async (bytes, key) => sign(bytes, key),
   })
-  const core = new AegleCore()
-  const sync = new AegleSync({ bzz, core })
+  const core = new Core()
+  const sync = new Sync({ bzz, core })
 
   test('actor protocol', async done => {
     const keyPair = createKeyPair()

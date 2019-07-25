@@ -1,36 +1,136 @@
 import {
+  CONTACT_NAME,
+  FIRST_CONTACT_NAME,
   ActorData,
   ContactData,
   FirstContactData,
   ProfileData,
 } from '@aegle/core'
-import { AegleSync, getPublicAddress } from '@aegle/sync'
+import { Sync, getPublicAddress } from '@aegle/sync'
+import { hexValue } from '@erebos/hex'
 import { KeyPair, createKeyPair } from '@erebos/secp256k1'
-import { BehaviorSubject, Subscription } from 'rxjs'
+import { BehaviorSubject, Observable, Subscription } from 'rxjs'
+import { map } from 'rxjs/operators'
 
-import { AgentInboxes, AgentInboxData, AgentOutboxes } from './AgentMessaging'
-import {
-  createContactSubscriber,
-  createFirstContactSubscriber,
-  writeFirstContact,
-} from './contact'
 import { FileSystemReader, FileSystemWriter } from './fileSystem'
+import { InboxesAgent, InboxAgentData, OutboxesAgent } from './messaging'
+
+const CONTACT_FEED_PARAMS = { entityType: CONTACT_NAME, name: CONTACT_NAME }
+
+const FIRST_CONTACT_FEED_PARAMS = {
+  entityType: FIRST_CONTACT_NAME,
+  name: FIRST_CONTACT_NAME,
+}
 
 const POLL_INTERVAL = 10 * 1000 // 10 secs
 
-export interface AgentActorData {
+export interface ContactParams {
+  sync: Sync
+  keyPair: KeyPair
+  contactKey: string
+}
+
+export async function readContact(
+  params: ContactParams,
+): Promise<ContactData | null> {
+  return await params.sync.readFeed<ContactData>({
+    ...CONTACT_FEED_PARAMS,
+    keyPair: params.keyPair,
+    writer: params.contactKey,
+  })
+}
+
+export async function writeContact(
+  params: ContactParams,
+  data: ContactData,
+): Promise<hexValue> {
+  return await params.sync.writeFeed<ContactData>(
+    {
+      ...CONTACT_FEED_PARAMS,
+      keyPair: params.keyPair,
+      reader: params.contactKey,
+    },
+    data,
+  )
+}
+
+export interface ContactSubscriberParams extends ContactParams {
+  interval: number
+}
+
+export function createContactSubscriber(
+  params: ContactSubscriberParams,
+): Observable<ContactData> {
+  return params.sync
+    .createFeedSubscriber<ContactData>({
+      ...CONTACT_FEED_PARAMS,
+      keyPair: params.keyPair,
+      options: { interval: params.interval },
+      writer: params.contactKey,
+    })
+    .pipe(map((payload: any) => payload.data))
+}
+
+export interface FirstContactParams {
+  actorKey: string
+  keyPair: KeyPair
+  sync: Sync
+}
+
+export async function readFirstContact(
+  params: FirstContactParams,
+): Promise<FirstContactData | null> {
+  return await params.sync.readFeed<FirstContactData>({
+    ...FIRST_CONTACT_FEED_PARAMS,
+    keyPair: params.keyPair,
+    writer: params.actorKey,
+  })
+}
+
+export async function writeFirstContact(
+  params: FirstContactParams,
+  data: FirstContactData,
+): Promise<string> {
+  return await params.sync.writeFeed<FirstContactData>(
+    {
+      ...FIRST_CONTACT_FEED_PARAMS,
+      keyPair: params.keyPair,
+      reader: params.actorKey,
+    },
+    data,
+  )
+}
+
+export interface FirstContactSubscriberParams extends FirstContactParams {
+  interval: number
+}
+
+export function createFirstContactSubscriber(
+  params: FirstContactSubscriberParams,
+): Observable<FirstContactData> {
+  return params.sync
+    .createFeedSubscriber<FirstContactData>({
+      ...FIRST_CONTACT_FEED_PARAMS,
+      keyPair: params.keyPair,
+      options: { interval: params.interval },
+      writer: params.actorKey,
+    })
+    .pipe(map((payload: any) => payload.data))
+}
+
+export interface ActorAgentData {
   keyPair: KeyPair
   profile?: ProfileData
 }
 
-export interface AgentReadContactData {
+export interface ReadContactAgentData {
   actorAddress: string
   actorData?: ActorData
   contactPublicKey?: string // If knows, means first contact has been established
   contactData?: ContactData
 }
 
-export interface AgentWriteContactData {
+export interface WriteContactAgentData {
   keyPair: KeyPair
   firstContactWritten: boolean
   fileSystemKeyPair?: KeyPair
@@ -38,41 +138,41 @@ export interface AgentWriteContactData {
   profile?: ProfileData
 }
 
-export interface AgentContactData {
-  read: AgentReadContactData
-  write: AgentWriteContactData
+export interface ContactAgentData {
+  read: ReadContactAgentData
+  write: WriteContactAgentData
 }
 
-export interface AgentFirstContactData {
+export interface FirstContactAgentData {
   keyPair: KeyPair
   actorKey: string
 }
 
-export interface AgentContactParams {
-  sync: AegleSync
-  data: AgentContactData
-  firstContact?: AgentFirstContactData
+export interface ContactAgentParams {
+  sync: Sync
+  data: ContactAgentData
+  firstContact?: FirstContactAgentData
   interval?: number
 }
 
-export class AgentContact {
+export class ContactAgent {
   private firstContactSub: Subscription | null = null
   private contactSub: Subscription | null = null
   private inFS: FileSystemReader | null
   private outFS: FileSystemWriter | void
-  private agentOutboxes: AgentOutboxes | null
+  private outboxesAgent: OutboxesAgent | null
 
-  protected firstContact: AgentFirstContactData | void
+  protected firstContact: FirstContactAgentData | void
   protected interval: number
-  protected sync: AegleSync
-  protected read: AgentReadContactData
-  protected write: AgentWriteContactData
+  protected sync: Sync
+  protected read: ReadContactAgentData
+  protected write: WriteContactAgentData
 
   public connected$: BehaviorSubject<boolean>
   public data$: BehaviorSubject<ContactData | null>
-  public inboxes: AgentInboxes
+  public inboxes: InboxesAgent
 
-  public constructor(params: AgentContactParams) {
+  public constructor(params: ContactAgentParams) {
     this.interval = params.interval || POLL_INTERVAL
     this.firstContact = params.firstContact
     this.sync = params.sync
@@ -93,7 +193,7 @@ export class AgentContact {
 
     this.data$ = new BehaviorSubject(params.data.read.contactData || null)
 
-    const inboxes: Record<string, AgentInboxData> = {}
+    const inboxes: Record<string, InboxAgentData> = {}
     if (
       this.read.contactData != null &&
       this.read.contactData.mailboxes != null
@@ -104,13 +204,13 @@ export class AgentContact {
         inboxes[label] = { publicKey }
       }
     }
-    this.inboxes = new AgentInboxes({
+    this.inboxes = new InboxesAgent({
       sync: this.sync,
       keyPair: this.write.keyPair,
       inboxes,
     })
 
-    this.agentOutboxes = this.createOutboxes()
+    this.outboxesAgent = this.createOutboxes()
   }
 
   public async initialize() {
@@ -137,7 +237,7 @@ export class AgentContact {
   }
 
   public createFirstContactSubscription(
-    firstContact: AgentFirstContactData,
+    firstContact: FirstContactAgentData,
   ): void {
     if (this.firstContactSub != null) {
       this.firstContactSub.unsubscribe()
@@ -207,9 +307,9 @@ export class AgentContact {
     return this.outFS
   }
 
-  protected createOutboxes(): AgentOutboxes | null {
+  protected createOutboxes(): OutboxesAgent | null {
     if (this.read.contactPublicKey != null) {
-      return new AgentOutboxes({
+      return new OutboxesAgent({
         sync: this.sync,
         publicKey: this.read.contactPublicKey,
         outboxes: this.write.mailboxes,
@@ -218,10 +318,10 @@ export class AgentContact {
     return null
   }
 
-  public get outboxes(): AgentOutboxes | null {
-    if (this.agentOutboxes == null) {
-      this.agentOutboxes = this.createOutboxes()
+  public get outboxes(): OutboxesAgent | null {
+    if (this.outboxesAgent == null) {
+      this.outboxesAgent = this.createOutboxes()
     }
-    return this.agentOutboxes
+    return this.outboxesAgent
   }
 }

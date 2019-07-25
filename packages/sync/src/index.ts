@@ -1,9 +1,4 @@
-import {
-  AegleCore,
-  EntityPayload,
-  encodePayload,
-  getBodyStream,
-} from '@aegle/core'
+import { Core, EntityPayload, encodePayload, getBodyStream } from '@aegle/core'
 import {
   BaseResponse,
   Bzz,
@@ -116,16 +111,16 @@ export interface SubscriberParams extends ReaderParams {
   options: PollContentOptions
 }
 
-export interface AegleSyncConfig {
+export interface SyncConfig {
   bzz: Bzz
-  core: AegleCore
+  core: Core
 }
 
-export class AegleSync {
+export class Sync {
   public bzz: Bzz
-  public core: AegleCore
+  public core: Core
 
-  public constructor(config: AegleSyncConfig) {
+  public constructor(config: SyncConfig) {
     this.bzz = config.bzz
     this.core = config.core
   }

@@ -1,30 +1,60 @@
-import { MessageData } from '@aegle/core'
-import { AegleSync } from '@aegle/sync'
+import { MAILBOX_NAME, MESSAGE_NAME, MessageData } from '@aegle/core'
+import { Sync } from '@aegle/sync'
 import { KeyPair, createKeyPair } from '@erebos/secp256k1'
+import { Chapter } from '@erebos/timeline'
 import { Subject, Subscription } from 'rxjs'
-
-import { createMailboxReader, createMailboxWriter } from './messaging'
 
 const POLL_INTERVAL = 60 * 1000 // 1 min
 
-interface AgentMailboxParams {
-  sync: AegleSync
+interface MailboxParams {
+  sync: Sync
+  keyPair: KeyPair
+}
+
+export interface MailboxReaderParams extends MailboxParams {
+  writer: string
+}
+
+export function createMailboxReader(params: MailboxReaderParams) {
+  return params.sync.createReadTimeline<MessageData>({
+    keyPair: params.keyPair,
+    writer: params.writer,
+    entityType: MESSAGE_NAME,
+    name: MAILBOX_NAME,
+  })
+}
+
+export interface MailboxWriterParams extends MailboxParams {
+  reader: string
+}
+
+export function createMailboxWriter(params: MailboxWriterParams) {
+  return params.sync.createTimelinePublisher<MessageData>({
+    keyPair: params.keyPair,
+    reader: params.reader,
+    entityType: MESSAGE_NAME,
+    name: MAILBOX_NAME,
+  })
+}
+
+interface MailboxAgentParams {
+  sync: Sync
   keyPair: KeyPair
   interval?: number
 }
 
-export interface AgentInboxParams extends AgentMailboxParams {
+export interface InboxAgentParams extends MailboxAgentParams {
   publicKey: string
   messages?: Array<MessageData>
 }
 
-export class AgentInbox {
+export class InboxAgent {
   protected subscription: Subscription
 
   public messages: Array<MessageData>
   public newMessage$: Subject<MessageData>
 
-  public constructor(params: AgentInboxParams) {
+  public constructor(params: InboxAgentParams) {
     this.messages = params.messages || []
     this.newMessage$ = new Subject()
 
@@ -35,7 +65,7 @@ export class AgentInbox {
     })
       .live({ interval: params.interval || POLL_INTERVAL })
       .subscribe({
-        next: chapters => {
+        next: (chapters: Array<Chapter<MessageData>>) => {
           const messages = chapters.map(c => c.content)
           this.messages = this.messages.concat(messages)
           messages.forEach(m => {
@@ -46,30 +76,30 @@ export class AgentInbox {
   }
 }
 
-export interface AgentInboxData {
+export interface InboxAgentData {
   publicKey: string
   messages?: Array<MessageData>
 }
 
-export interface AgentInboxesParams extends AgentMailboxParams {
-  inboxes?: Record<string, AgentInboxData>
+export interface InboxesAgentParams extends MailboxAgentParams {
+  inboxes?: Record<string, InboxAgentData>
 }
 
-export interface AgentInboxNewMessageData {
+export interface InboxNewMessageData {
   inbox: string
   message: MessageData
 }
 
-export class AgentInboxes {
-  protected sync: AegleSync
+export class InboxesAgent {
+  protected sync: Sync
   protected keyPair: KeyPair
   protected interval: number | undefined
   protected inboxSubscriptions: Record<string, Subscription> = {}
 
-  public inboxes: Record<string, AgentInbox> = {}
-  public newMessage$: Subject<AgentInboxNewMessageData>
+  public inboxes: Record<string, InboxAgent> = {}
+  public newMessage$: Subject<InboxNewMessageData>
 
-  public constructor(params: AgentInboxesParams) {
+  public constructor(params: InboxesAgentParams) {
     this.sync = params.sync
     this.keyPair = params.keyPair
     this.interval = params.interval
@@ -86,11 +116,11 @@ export class AgentInboxes {
     return this.inboxes[label] != null
   }
 
-  public getInbox(label: string): AgentInbox | null {
+  public getInbox(label: string): InboxAgent | null {
     return this.inboxes[label] || null
   }
 
-  public setInbox(label: string, inbox: AgentInbox): void {
+  public setInbox(label: string, inbox: InboxAgent): void {
     this.inboxes[label] = inbox
     this.inboxSubscriptions[label] = inbox.newMessage$.subscribe({
       next: message => {
@@ -99,8 +129,8 @@ export class AgentInboxes {
     })
   }
 
-  public addInbox(label: string, data: AgentInboxData): AgentInbox {
-    const inbox = new AgentInbox({
+  public addInbox(label: string, data: InboxAgentData): InboxAgent {
+    const inbox = new InboxAgent({
       sync: this.sync,
       keyPair: this.keyPair,
       interval: this.interval,
@@ -111,12 +141,7 @@ export class AgentInboxes {
     return inbox
   }
 
-  public removeInbox(label: string): boolean {
-    const inbox = this.getInbox(label)
-    if (inbox == null) {
-      return false
-    }
-
+  public removeInbox(label: string): void {
     delete this.inboxes[label]
 
     const sub = this.inboxSubscriptions[label]
@@ -124,26 +149,24 @@ export class AgentInboxes {
       sub.unsubscribe()
       delete this.inboxSubscriptions[label]
     }
-
-    return true
   }
 }
 
 type SendMessage = (message: MessageData) => Promise<any>
 
-export interface AgentOutboxesParams {
-  sync: AegleSync
+export interface OutboxesAgentParams {
+  sync: Sync
   publicKey: string
   outboxes?: Record<string, KeyPair>
 }
 
-export class AgentOutboxes {
-  protected sync: AegleSync
+export class OutboxesAgent {
+  protected sync: Sync
   protected publicKey: string
 
   public outboxes: Record<string, SendMessage> = {}
 
-  public constructor(params: AgentOutboxesParams) {
+  public constructor(params: OutboxesAgentParams) {
     this.sync = params.sync
     this.publicKey = params.publicKey
 
@@ -176,13 +199,8 @@ export class AgentOutboxes {
     return keyPair
   }
 
-  public removeOutbox(label: string): boolean {
-    if (!this.hasOutbox(label)) {
-      return false
-    }
-
+  public removeOutbox(label: string): void {
     delete this.outboxes[label]
-    return true
   }
 
   public async sendMessage(

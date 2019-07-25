@@ -1,5 +1,5 @@
 import { ACTOR_NAME, ActorData } from '@aegle/core'
-import { AegleSync } from '@aegle/sync'
+import { Sync } from '@aegle/sync'
 import { hexValue } from '@erebos/hex'
 import { KeyPair } from '@erebos/secp256k1'
 import { Observable } from 'rxjs'
@@ -9,7 +9,7 @@ const FEED_PARAMS = { entityType: ACTOR_NAME, name: ACTOR_NAME }
 
 export interface ActorReaderParams {
   actor: string
-  sync: AegleSync
+  sync: Sync
 }
 
 export async function readActor(
@@ -36,7 +36,7 @@ export function createActorSubscriber(
 
 export interface ActorWriterParams {
   keyPair: KeyPair
-  sync: AegleSync
+  sync: Sync
 }
 
 export async function writeActor(

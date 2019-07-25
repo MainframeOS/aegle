@@ -12,8 +12,7 @@ import {
   encodePayload,
   encrypt,
 } from '@aegle/core'
-import { AegleSync, FeedWriteParams, getFeedWriteParams } from '@aegle/sync'
-
+import { FeedWriteParams, Sync, getFeedWriteParams } from '@aegle/sync'
 import { KeyPair } from '@erebos/secp256k1'
 import getStream from 'get-stream'
 import PQueue from 'p-queue'
@@ -30,7 +29,7 @@ export function isValidPath(path: string): boolean {
 }
 
 export async function downloadFile(
-  sync: AegleSync,
+  sync: Sync,
   file: FileData,
 ): Promise<NodeJS.ReadableStream> {
   const res = await sync.bzz.download(file.hash, {
@@ -46,7 +45,7 @@ export async function downloadFile(
 }
 
 export async function uploadFile(
-  sync: AegleSync,
+  sync: Sync,
   data: string | Buffer | Readable | Record<string, any>,
   params: FileUploadParams = {},
 ): Promise<FileData> {
@@ -95,12 +94,12 @@ export async function uploadFile(
 }
 
 export interface FileSystemParams {
-  sync: AegleSync
+  sync: Sync
   files?: FilesRecord
 }
 
 export class FileSystem {
-  protected sync: AegleSync
+  protected sync: Sync
   public files: BehaviorSubject<FilesRecord>
 
   public constructor(params: FileSystemParams) {
