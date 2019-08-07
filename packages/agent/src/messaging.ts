@@ -1,7 +1,7 @@
 import { MAILBOX_NAME, MESSAGE_NAME, MessageData } from '@aegle/core'
 import { Sync } from '@aegle/sync'
 import { KeyPair, createKeyPair } from '@erebos/secp256k1'
-import { Chapter } from '@erebos/timeline'
+import { Chapter, Timeline } from '@erebos/timeline'
 import { Subject, Subscription } from 'rxjs'
 
 const POLL_INTERVAL = 60 * 1000 // 1 min
@@ -15,7 +15,9 @@ export interface MailboxReaderParams extends MailboxParams {
   writer: string
 }
 
-export function createMailboxReader(params: MailboxReaderParams) {
+export function createMailboxReader(
+  params: MailboxReaderParams,
+): Timeline<MessageData> {
   return params.sync.createReadTimeline<MessageData>({
     keyPair: params.keyPair,
     writer: params.writer,

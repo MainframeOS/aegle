@@ -21,7 +21,7 @@ import {
   FileSystemReader,
 } from '@aegle/agent'
 
-describe('protocols', () => {
+describe('agent', () => {
   const bzz = new Bzz({
     url: 'http://localhost:8500',
     signBytes: async (bytes, key) => sign(bytes, key),

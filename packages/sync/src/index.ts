@@ -1,4 +1,10 @@
-import { Core, EntityPayload, encodePayload, getBodyStream } from '@aegle/core'
+import {
+  Core,
+  EntityPayload,
+  decodeStream,
+  encodePayload,
+  fromBuffer,
+} from '@aegle/core'
 import {
   BaseResponse,
   Bzz,
@@ -16,7 +22,6 @@ import {
   Timeline,
   validateChapter,
 } from '@erebos/timeline'
-import getStream from 'get-stream'
 import PQueue from 'p-queue'
 import { Observable } from 'rxjs'
 import { flatMap } from 'rxjs/operators'
@@ -90,7 +95,6 @@ export function getFeedWriteParams(
     signParams: keyPair.getPrivate(),
   }
 }
-
 export interface ChannelParams {
   entityType: string
   name?: string
@@ -262,9 +266,8 @@ export class Sync {
     )
 
     const decode = async (res: BaseResponse<NodeJS.ReadableStream>) => {
-      const stream = await getBodyStream(res.body, { key: encryptionKey })
-      const body = await getStream(stream)
-      const chapter = validateChapter(JSON.parse(body))
+      const body = await decodeStream(res.body, { key: encryptionKey })
+      const chapter = validateChapter(fromBuffer(body))
       await this.core.validateEntity(chapter.content)
       return chapter
     }
