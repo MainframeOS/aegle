@@ -117,7 +117,7 @@ export interface SubscriberParams extends ReaderParams {
 
 export interface SyncConfig {
   bzz: Bzz
-  core: Core
+  core?: Core
 }
 
 export class Sync {
@@ -126,7 +126,7 @@ export class Sync {
 
   public constructor(config: SyncConfig) {
     this.bzz = config.bzz
-    this.core = config.core
+    this.core = config.core || new Core()
   }
 
   public createPublisher<T, U>(push: (data: T) => Promise<U>) {

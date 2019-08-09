@@ -159,34 +159,38 @@ export class ContactAgent {
   private firstContactSub: Subscription | null = null
   private contactSub: Subscription | null = null
   private inFS: FileSystemReader | null
-  private outFS: FileSystemWriter | void
-  private outboxesAgent: OutboxesAgent | null
 
   protected firstContact: FirstContactAgentData | void
   protected interval: number
+  protected localData: ContactAgentData
   protected sync: Sync
-  protected read: ReadContactAgentData
-  protected write: WriteContactAgentData
 
   public connected$: BehaviorSubject<boolean>
   public data$: BehaviorSubject<ContactData | null>
   public inboxes: InboxesAgent
+  public outboxes: OutboxesAgent | null = null
+  public outboundFileSystem: FileSystemWriter | null = null
 
   public constructor(params: ContactAgentParams) {
     this.interval = params.interval || POLL_INTERVAL
     this.firstContact = params.firstContact
     this.sync = params.sync
-    this.read = params.data.read
-    this.write = params.data.write
+    this.localData = params.data
 
     this.inFS = this.createInboundFileSystem()
-    if (this.write.fileSystemKeyPair != null) {
-      this.outFS = this.createOutboundFileSystem(this.write.fileSystemKeyPair)
+    if (this.localData.write.fileSystemKeyPair != null) {
+      this.outboundFileSystem = new FileSystemWriter({
+        keyPair: this.localData.write.fileSystemKeyPair,
+        sync: this.sync,
+      })
     }
 
-    this.connected$ = new BehaviorSubject(this.read.contactPublicKey != null)
+    this.connected$ = new BehaviorSubject(
+      this.localData.read.contactPublicKey != null,
+    )
     if (this.connected$.value) {
-      this.createContactSubscription(this.read.contactPublicKey as string)
+      this.createContactSubscription(this.localData.read
+        .contactPublicKey as string)
     } else if (this.firstContact != null) {
       this.createFirstContactSubscription(this.firstContact)
     }
@@ -195,22 +199,65 @@ export class ContactAgent {
 
     const inboxes: Record<string, InboxAgentData> = {}
     if (
-      this.read.contactData != null &&
-      this.read.contactData.mailboxes != null
+      this.localData.read.contactData != null &&
+      this.localData.read.contactData.mailboxes != null
     ) {
-      for (const [label, publicKey] of Object.entries(
-        this.read.contactData.mailboxes,
+      for (const [label, writer] of Object.entries(
+        this.localData.read.contactData.mailboxes,
       )) {
-        inboxes[label] = { publicKey }
+        inboxes[label] = { writer }
       }
     }
     this.inboxes = new InboxesAgent({
       sync: this.sync,
-      keyPair: this.write.keyPair,
+      keyPair: this.localData.write.keyPair,
       inboxes,
     })
 
-    this.outboxesAgent = this.createOutboxes()
+    if (this.localData.read.contactPublicKey != null) {
+      this.outboxes = new OutboxesAgent({
+        sync: this.sync,
+        reader: this.localData.read.contactPublicKey,
+        outboxes: this.localData.write.mailboxes,
+      })
+    }
+  }
+
+  private async pushContactData(): Promise<boolean> {
+    const { contactPublicKey } = this.localData.read
+    if (contactPublicKey == null) {
+      return false
+    }
+
+    const {
+      keyPair,
+      fileSystemKeyPair,
+      mailboxes,
+      profile,
+    } = this.localData.write
+    await writeContact(
+      {
+        sync: this.sync,
+        keyPair,
+        contactKey: contactPublicKey,
+      },
+      {
+        fileSystemKey: fileSystemKeyPair
+          ? fileSystemKeyPair.getPublic('hex')
+          : undefined,
+        mailboxes: mailboxes
+          ? Object.entries(mailboxes).reduce(
+              (acc, [label, keyPair]) => {
+                acc[label] = keyPair.getPublic('hex')
+                return acc
+              },
+              {} as Record<string, string>,
+            )
+          : undefined,
+        profile,
+      },
+    )
+    return true
   }
 
   public async initialize() {
@@ -222,15 +269,15 @@ export class ContactAgent {
         writeFirstContact(
           { ...this.firstContact, sync: this.sync },
           {
-            contactPublicKey: this.write.keyPair.getPublic('hex'),
+            contactPublicKey: this.localData.write.keyPair.getPublic('hex'),
             actorAddress: getPublicAddress(this.firstContact.keyPair),
           },
         ),
       )
     }
 
-    if (this.outFS != null) {
-      calls.push(this.outFS.initialize())
+    if (this.outboundFileSystem != null) {
+      calls.push(this.outboundFileSystem.initialize())
     }
 
     await Promise.all(calls)
@@ -249,7 +296,7 @@ export class ContactAgent {
       actorKey: firstContact.actorKey,
     }).subscribe({
       next: (data: FirstContactData) => {
-        this.read.contactPublicKey = data.contactPublicKey
+        this.localData.read.contactPublicKey = data.contactPublicKey
         this.createContactSubscription(data.contactPublicKey)
         if (this.firstContactSub != null) {
           this.firstContactSub.unsubscribe()
@@ -267,29 +314,25 @@ export class ContactAgent {
     this.contactSub = createContactSubscriber({
       sync: this.sync,
       interval: this.interval,
-      keyPair: this.write.keyPair,
+      keyPair: this.localData.write.keyPair,
       contactKey,
     }).subscribe({
       next: (data: ContactData) => {
-        this.read.contactData = data
+        this.localData.read.contactData = data
         this.data$.next(data)
       },
     })
   }
 
   protected createInboundFileSystem(): FileSystemReader | null {
-    return this.read.contactData != null &&
-      this.read.contactData.fileSystemKey != null
+    return this.localData.read.contactData != null &&
+      this.localData.read.contactData.fileSystemKey != null
       ? new FileSystemReader({
           sync: this.sync,
-          writer: this.read.contactData.fileSystemKey,
-          keyPair: this.write.keyPair,
+          writer: this.localData.read.contactData.fileSystemKey,
+          keyPair: this.localData.write.keyPair,
         })
       : null
-  }
-
-  protected createOutboundFileSystem(keyPair: KeyPair): FileSystemWriter {
-    return new FileSystemWriter({ keyPair, sync: this.sync })
   }
 
   public get inboundFileSystem(): FileSystemReader | null {
@@ -299,29 +342,35 @@ export class ContactAgent {
     return this.inFS
   }
 
-  public get outboundFileSystem(): FileSystemWriter {
-    if (this.outFS == null) {
-      this.write.fileSystemKeyPair = createKeyPair()
-      this.outFS = this.createOutboundFileSystem(this.write.fileSystemKeyPair)
-    }
-    return this.outFS
-  }
-
-  protected createOutboxes(): OutboxesAgent | null {
-    if (this.read.contactPublicKey != null) {
-      return new OutboxesAgent({
+  public async createOutboundFileSystem(): Promise<KeyPair> {
+    if (this.localData.write.fileSystemKeyPair == null) {
+      this.localData.write.fileSystemKeyPair = createKeyPair()
+      this.outboundFileSystem = new FileSystemWriter({
+        keyPair: this.localData.write.fileSystemKeyPair,
         sync: this.sync,
-        publicKey: this.read.contactPublicKey,
-        outboxes: this.write.mailboxes,
       })
+      await this.pushContactData()
     }
-    return null
+    return this.localData.write.fileSystemKeyPair
   }
 
-  public get outboxes(): OutboxesAgent | null {
-    if (this.outboxesAgent == null) {
-      this.outboxesAgent = this.createOutboxes()
+  public async createOutboxes(): Promise<boolean> {
+    if (this.outboxes != null) {
+      return true
     }
-    return this.outboxesAgent
+    if (this.localData.read.contactPublicKey == null) {
+      return false
+    }
+    this.outboxes = new OutboxesAgent({
+      sync: this.sync,
+      reader: this.localData.read.contactPublicKey,
+      outboxes: this.localData.write.mailboxes,
+    })
+    return await this.pushContactData()
+  }
+
+  public async setProfile(profile: ProfileData): Promise<void> {
+    this.localData.write.profile = profile
+    await this.pushContactData()
   }
 }

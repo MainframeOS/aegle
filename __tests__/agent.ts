@@ -1,22 +1,35 @@
+import { Readable } from 'stream'
 import { Bzz } from '@erebos/api-bzz-node'
 import { createKeyPair, sign } from '@erebos/secp256k1'
 import getStream from 'get-stream'
+import { BehaviorSubject } from 'rxjs'
 
-import { Core } from '@aegle/core'
+import { Core, FilesRecord } from '@aegle/core'
 import { Sync, getPublicAddress } from '@aegle/sync'
 import {
+  // actor
   createActorSubscriber,
   createActorWriter,
   writeActor,
   readActor,
+  // contact
+  createFirstContactSubscriber,
   writeFirstContact,
   readFirstContact,
+  createContactSubscriber,
   writeContact,
   readContact,
+  // messaging
   createMailboxWriter,
   createMailboxReader,
+  InboxAgent,
+  InboxState,
+  InboxesAgent,
+  OutboxesAgent,
+  // fileSystem
   uploadFile,
   downloadFile,
+  FileSystem,
   FileSystemWriter,
   FileSystemReader,
 } from '@aegle/agent'
@@ -28,6 +41,15 @@ describe('agent', () => {
   })
   const core = new Core()
   const sync = new Sync({ bzz, core })
+
+  function toReadable(chunk: string | Buffer): Readable {
+    return new Readable({
+      read() {
+        this.push(chunk)
+        this.push(null)
+      },
+    })
+  }
 
   test('actor protocol', async done => {
     const keyPair = createKeyPair()
@@ -56,7 +78,7 @@ describe('agent', () => {
   })
 
   describe('contact protocols', () => {
-    test('firstContact', async () => {
+    test('writeFirstContact() and readFirstContact()', async () => {
       const aliceKeyPair = createKeyPair()
       const bobKeyPair = createKeyPair()
 
@@ -84,7 +106,42 @@ describe('agent', () => {
       expect(receivedFirstContact).toEqual(sendFirstContact)
     })
 
-    test('contact', async () => {
+    test('createFirstContactSubscriber()', async done => {
+      const aliceKeyPair = createKeyPair()
+      const bobKeyPair = createKeyPair()
+
+      const sendFirstContact = {
+        contactPublicKey: createKeyPair().getPublic('hex'),
+        actorAddress: getPublicAddress(aliceKeyPair),
+      }
+
+      const sub = createFirstContactSubscriber({
+        sync,
+        keyPair: bobKeyPair,
+        actorKey: aliceKeyPair.getPublic('hex'),
+        interval: 1000,
+      }).subscribe({
+        next: data => {
+          expect(data).toEqual(sendFirstContact)
+          sub.unsubscribe()
+          done()
+        },
+        error: err => {
+          done(err)
+        },
+      })
+
+      await writeFirstContact(
+        {
+          sync,
+          keyPair: aliceKeyPair,
+          actorKey: bobKeyPair.getPublic('hex'),
+        },
+        sendFirstContact,
+      )
+    })
+
+    test('writeContact() and readContact()', async () => {
       const aliceKeyPair = createKeyPair()
       const bobKeyPair = createKeyPair()
 
@@ -112,10 +169,47 @@ describe('agent', () => {
       })
       expect(receivedContact).toEqual(sendContact)
     })
+
+    test('createContactSubscriber()', async done => {
+      const aliceKeyPair = createKeyPair()
+      const bobKeyPair = createKeyPair()
+
+      const sendContact = {
+        profile: {
+          displayName: 'Alice',
+        },
+      }
+
+      const sub = createContactSubscriber({
+        sync,
+        keyPair: bobKeyPair,
+        contactKey: aliceKeyPair.getPublic('hex'),
+        interval: 1000,
+      }).subscribe({
+        next: data => {
+          expect(data).toEqual(sendContact)
+          sub.unsubscribe()
+          done()
+        },
+        error: err => {
+          done(err)
+        },
+      })
+
+      await writeContact(
+        {
+          sync,
+          keyPair: aliceKeyPair,
+          contactKey: bobKeyPair.getPublic('hex'),
+        },
+        sendContact,
+      )
+    })
   })
 
   describe('fileSystem protocol', () => {
-    test('uploadFile() and downloadFile()', async () => {
+    // TODO: also test with a steam as input
+    test('uploadFile() and downloadFile() with encryption', async () => {
       const data = 'Hello test'
       const file = await uploadFile(sync, data, { encrypt: true })
       expect(file.hash).toBeDefined()
@@ -126,7 +220,135 @@ describe('agent', () => {
       expect(text).toBe(data)
     })
 
-    test('FileSystemReader and FileSystemWriter classes', async () => {
+    test('uploadFile() and downloadFile() without encryption', async () => {
+      const data = Buffer.from('Hello test')
+      const file = await uploadFile(sync, data)
+      expect(file.hash).toBeDefined()
+      expect(file.encryption).not.toBeDefined()
+
+      const res = await downloadFile(sync, file)
+      const text = await getStream(res)
+      expect(text).toBe('Hello test')
+    })
+
+    // This doesn't work - need more investigation
+    test.skip('uploadFile() supports a stream as input', async () => {
+      const file1 = await uploadFile(sync, toReadable('hello'), {
+        encrypt: true,
+      })
+      const res1 = await downloadFile(sync, file1)
+      const text1 = await getStream(res1)
+      expect(text1).toBe('hello')
+
+      const file2 = await uploadFile(sync, toReadable('hello'))
+      const res2 = await downloadFile(sync, file2)
+      const text2 = await getStream(res2)
+      expect(text2).toBe('hello')
+    })
+
+    describe('FileSystem class', () => {
+      let files: FilesRecord = {}
+      beforeAll(async () => {
+        const [plaintext, encrypted, data] = await Promise.all([
+          uploadFile(sync, 'hello world'),
+          uploadFile(sync, 'encrypted', { encrypt: true }),
+          uploadFile(sync, { hello: 'world' }),
+        ])
+        files = {
+          '/plain.txt': plaintext,
+          '/my/secret/file': encrypted,
+          '/data/hello.json': data,
+        }
+      })
+
+      test('stores the files references in a BehaviorSubject', () => {
+        const fs = new FileSystem({ sync, files })
+        expect(fs.files).toBeInstanceOf(BehaviorSubject)
+        expect(fs.files.value).toEqual(files)
+      })
+
+      test('hasFile() method', () => {
+        const fs = new FileSystem({ sync, files })
+        expect(fs.hasFile('/plain.txt')).toBe(true)
+        expect(fs.hasFile('/nothere')).toBe(false)
+      })
+
+      test('getFile() method', () => {
+        const fs = new FileSystem({ sync, files })
+        expect(fs.getFile('/my/secret/file')).toBe(files['/my/secret/file'])
+        expect(fs.getFile('/nothere')).toBe(null)
+      })
+
+      test('downloadFile() method', async () => {
+        const fs = new FileSystem({ sync, files })
+        await expect(fs.downloadFile('/plain.txt')).resolves.toBeInstanceOf(
+          Readable,
+        )
+        await expect(fs.downloadFile('/nothere')).rejects.toThrow(
+          'File not found',
+        )
+      })
+
+      test('downloadText() method', async () => {
+        const fs = new FileSystem({ sync, files })
+        await expect(fs.downloadText('/plain.txt')).resolves.toBe('hello world')
+        await expect(fs.downloadText('/my/secret/file')).resolves.toBe(
+          'encrypted',
+        )
+        await expect(fs.downloadText('/nothere')).rejects.toThrow(
+          'File not found',
+        )
+      })
+
+      test('downloadJSON() method', async () => {
+        const fs = new FileSystem({ sync, files })
+        await expect(fs.downloadJSON('/data/hello.json')).resolves.toEqual({
+          hello: 'world',
+        })
+        await expect(fs.downloadJSON('/my/secret/file')).rejects.toThrow()
+        await expect(fs.downloadJSON('/nothere')).rejects.toThrow(
+          'File not found',
+        )
+      })
+    })
+
+    test('FileSystemWriter class flow', async () => {
+      const actorKeyPair = createKeyPair()
+      const actorPubKey = actorKeyPair.getPublic('hex')
+      const fsKeyPair = createKeyPair()
+
+      const fs = new FileSystemWriter({
+        sync,
+        keyPair: fsKeyPair,
+        reader: actorPubKey,
+      })
+
+      await expect(fs.uploadFile('test.txt', 'hello')).rejects.toThrow(
+        'Invalid path',
+      )
+
+      expect(fs.moveFile('/test.txt', '/hello.txt')).toBe(false)
+      await fs.uploadFile('/test.txt', 'hello')
+      expect(fs.moveFile('/test.txt', '/hello.txt')).toBe(true)
+      expect(fs.removeFile('/test.txt')).toBe(false)
+
+      const sameFile = fs.getFile('/hello.txt')
+      expect(sameFile).toBeDefined()
+      fs.setFile('/same.txt', sameFile)
+      expect(fs.removeFile('/hello.txt')).toBe(true)
+      await fs.push()
+
+      const clone = new FileSystemWriter({
+        sync,
+        keyPair: fsKeyPair,
+        reader: actorPubKey,
+      })
+      await clone.initialize()
+      expect(clone.hasFile('/hello.txt')).toBe(false)
+      await expect(clone.downloadText('/same.txt')).resolves.toBe('hello')
+    })
+
+    test('FileSystemWriter and FileSystemReader flow', async () => {
       const aliceKeyPair = createKeyPair()
       const bobKeyPair = createKeyPair()
 
@@ -171,49 +393,147 @@ describe('agent', () => {
     })
   })
 
-  test('messaging protocol', async done => {
-    jest.setTimeout(10000)
+  describe('messaging protocol', () => {
+    test('createMailboxReader() and createMailboxWriter()', async done => {
+      jest.setTimeout(10000)
 
-    const aliceMailboxKeyPair = createKeyPair()
-    const bobKeyPair = createKeyPair()
+      const aliceMailboxKeyPair = createKeyPair()
+      const bobKeyPair = createKeyPair()
 
-    const write = createMailboxWriter({
-      sync,
-      keyPair: aliceMailboxKeyPair,
-      reader: bobKeyPair.getPublic('hex'),
-    })
+      const write = createMailboxWriter({
+        sync,
+        keyPair: aliceMailboxKeyPair,
+        reader: bobKeyPair.getPublic('hex'),
+      })
 
-    const firstMessage = { title: 'test', body: 'first' }
-    const chapter = await write(firstMessage)
+      const firstMessage = { title: 'test', body: 'first' }
+      const chapter = await write(firstMessage)
 
-    const reader = createMailboxReader({
-      sync,
-      keyPair: bobKeyPair,
-      writer: aliceMailboxKeyPair.getPublic('hex'),
-    })
+      const reader = createMailboxReader({
+        sync,
+        keyPair: bobKeyPair,
+        writer: aliceMailboxKeyPair.getPublic('hex'),
+      })
 
-    const firstChapter = await reader.getLatestChapter()
-    expect(firstChapter).toBeDefined()
-    expect(firstChapter.content.data).toEqual(firstMessage)
+      const firstChapter = await reader.getLatestChapter()
+      expect(firstChapter).toBeDefined()
+      expect(firstChapter.content.data).toEqual(firstMessage)
 
-    const secondMessage = { thread: chapter.id, title: 'test', body: 'second' }
+      const secondMessage = {
+        thread: chapter.id,
+        title: 'test',
+        body: 'second',
+      }
 
-    const sub = reader.pollLatestChapter({ interval: 1000 }).subscribe({
-      next: chapter => {
-        const { data } = chapter.content
-        if (data.thread != null) {
-          expect(data).toEqual(secondMessage)
+      const sub = reader.pollLatestChapter({ interval: 1000 }).subscribe({
+        next: chapter => {
+          const { data } = chapter.content
+          if (data.thread != null) {
+            expect(data).toEqual(secondMessage)
+            sub.unsubscribe()
+            done()
+          }
+        },
+        error: err => {
           sub.unsubscribe()
-          done()
-        }
-      },
-      error: err => {
-        sub.unsubscribe()
-        throw err
-      },
+          throw err
+        },
+      })
+
+      await write(secondMessage)
     })
 
-    await write(secondMessage)
+    describe('InboxAgent class', () => {
+      const aliceMailboxKeyPair = createKeyPair()
+      const aliceMailboxPublicKey = aliceMailboxKeyPair.getPublic('hex')
+      const bobKeyPair = createKeyPair()
+      const bobPublicKey = bobKeyPair.getPublic('hex')
+
+      test('starts in stopped state and can be started and stopped', () => {
+        const inbox = new InboxAgent({
+          sync,
+          keyPair: bobKeyPair,
+          writer: aliceMailboxPublicKey,
+        })
+        expect(inbox.state$.value).toBe(InboxState.STOPPED)
+        inbox.start()
+        expect(inbox.state$.value).toBe(InboxState.STARTED)
+        inbox.stop()
+        expect(inbox.state$.value).toBe(InboxState.STOPPED)
+      })
+
+      test('receives messages', async done => {
+        jest.setTimeout(10000)
+
+        const inbox = new InboxAgent({
+          sync,
+          keyPair: bobKeyPair,
+          writer: aliceMailboxPublicKey,
+          interval: 1000,
+          start: true,
+        })
+        expect(inbox.state$.value).toBe(InboxState.STARTED)
+
+        const write = createMailboxWriter({
+          sync,
+          keyPair: aliceMailboxKeyPair,
+          reader: bobPublicKey,
+        })
+        const messages = [{ body: 'hello' }, { body: 'world' }]
+
+        const sub = inbox.newMessage$.subscribe({
+          next: async msg => {
+            if (msg.body === 'world') {
+              expect(inbox.messages).toEqual(messages)
+              sub.unsubscribe()
+              inbox.stop()
+              done()
+            } else if (msg.body === 'hello') {
+              await write(messages[1])
+            } else {
+              throw new Error('Unexpected message')
+            }
+          },
+        })
+        await write(messages[0])
+      })
+    })
+
+    test('InboxesAgent and OutboxesAgent classes', async done => {
+      const aliceKeyPair = createKeyPair()
+      const bobKeyPair = createKeyPair()
+
+      const outboxes = new OutboxesAgent({
+        sync,
+        reader: bobKeyPair.getPublic('hex'),
+        outboxes: {
+          first: aliceKeyPair,
+        },
+      })
+
+      const inboxes = new InboxesAgent({
+        sync,
+        keyPair: bobKeyPair,
+        interval: 1000,
+        autoStart: true,
+        inboxes: {
+          firstFromAlice: { writer: aliceKeyPair.getPublic('hex') },
+        },
+      })
+
+      inboxes.newMessage$.subscribe(async inboxMessage => {
+        if (inboxMessage.inbox === 'last') {
+          inboxes.stopAll()
+          done()
+        } else {
+          const newKeyPair = outboxes.addOutbox('test')
+          inboxes.addInbox('last', { writer: newKeyPair.getPublic('hex') })
+          await outboxes.sendMessage('test', { body: 'world' })
+        }
+      })
+
+      await outboxes.sendMessage('first', { body: 'hello' })
+    })
   })
 
   test('end-to-end flow', async () => {
