@@ -118,11 +118,6 @@ export function createFirstContactSubscriber(
     .pipe(map((payload: any) => payload.data))
 }
 
-export interface ActorAgentData {
-  keyPair: KeyPair
-  profile?: ProfileData
-}
-
 export interface ReadContactAgentData {
   actorAddress: string
   actorData?: ActorData
@@ -160,9 +155,9 @@ export class ContactAgent {
   private contactSub: Subscription | null = null
   private inFS: FileSystemReader | null
 
+  protected data: ContactAgentData
   protected firstContact: FirstContactAgentData | void
   protected interval: number
-  protected localData: ContactAgentData
   protected sync: Sync
 
   public connected$: BehaviorSubject<boolean>
@@ -172,69 +167,60 @@ export class ContactAgent {
   public outboundFileSystem: FileSystemWriter | null = null
 
   public constructor(params: ContactAgentParams) {
-    this.interval = params.interval || POLL_INTERVAL
+    this.data = params.data
     this.firstContact = params.firstContact
+    this.interval = params.interval || POLL_INTERVAL
     this.sync = params.sync
-    this.localData = params.data
+
+    const { read, write } = this.data
 
     this.inFS = this.createInboundFileSystem()
-    if (this.localData.write.fileSystemKeyPair != null) {
+    if (write.fileSystemKeyPair != null) {
       this.outboundFileSystem = new FileSystemWriter({
-        keyPair: this.localData.write.fileSystemKeyPair,
+        keyPair: write.fileSystemKeyPair,
         sync: this.sync,
       })
     }
 
-    this.connected$ = new BehaviorSubject(
-      this.localData.read.contactPublicKey != null,
-    )
+    this.connected$ = new BehaviorSubject(read.contactPublicKey != null)
     if (this.connected$.value) {
-      this.createContactSubscription(this.localData.read
-        .contactPublicKey as string)
+      this.createContactSubscription(read.contactPublicKey as string)
     } else if (this.firstContact != null) {
       this.createFirstContactSubscription(this.firstContact)
     }
 
-    this.data$ = new BehaviorSubject(params.data.read.contactData || null)
+    this.data$ = new BehaviorSubject(read.contactData || null)
 
     const inboxes: Record<string, InboxAgentData> = {}
-    if (
-      this.localData.read.contactData != null &&
-      this.localData.read.contactData.mailboxes != null
-    ) {
+    if (read.contactData != null && read.contactData.mailboxes != null) {
       for (const [label, writer] of Object.entries(
-        this.localData.read.contactData.mailboxes,
+        read.contactData.mailboxes,
       )) {
         inboxes[label] = { writer }
       }
     }
     this.inboxes = new InboxesAgent({
       sync: this.sync,
-      keyPair: this.localData.write.keyPair,
+      keyPair: write.keyPair,
       inboxes,
     })
 
-    if (this.localData.read.contactPublicKey != null) {
+    if (read.contactPublicKey != null) {
       this.outboxes = new OutboxesAgent({
         sync: this.sync,
-        reader: this.localData.read.contactPublicKey,
-        outboxes: this.localData.write.mailboxes,
+        reader: read.contactPublicKey,
+        outboxes: write.mailboxes,
       })
     }
   }
 
   private async pushContactData(): Promise<boolean> {
-    const { contactPublicKey } = this.localData.read
+    const { contactPublicKey } = this.data.read
     if (contactPublicKey == null) {
       return false
     }
 
-    const {
-      keyPair,
-      fileSystemKeyPair,
-      mailboxes,
-      profile,
-    } = this.localData.write
+    const { keyPair, fileSystemKeyPair, mailboxes, profile } = this.data.write
     await writeContact(
       {
         sync: this.sync,
@@ -269,7 +255,7 @@ export class ContactAgent {
         writeFirstContact(
           { ...this.firstContact, sync: this.sync },
           {
-            contactPublicKey: this.localData.write.keyPair.getPublic('hex'),
+            contactPublicKey: this.data.write.keyPair.getPublic('hex'),
             actorAddress: getPublicAddress(this.firstContact.keyPair),
           },
         ),
@@ -296,7 +282,7 @@ export class ContactAgent {
       actorKey: firstContact.actorKey,
     }).subscribe({
       next: (data: FirstContactData) => {
-        this.localData.read.contactPublicKey = data.contactPublicKey
+        this.data.read.contactPublicKey = data.contactPublicKey
         this.createContactSubscription(data.contactPublicKey)
         if (this.firstContactSub != null) {
           this.firstContactSub.unsubscribe()
@@ -314,23 +300,23 @@ export class ContactAgent {
     this.contactSub = createContactSubscriber({
       sync: this.sync,
       interval: this.interval,
-      keyPair: this.localData.write.keyPair,
+      keyPair: this.data.write.keyPair,
       contactKey,
     }).subscribe({
       next: (data: ContactData) => {
-        this.localData.read.contactData = data
+        this.data.read.contactData = data
         this.data$.next(data)
       },
     })
   }
 
   protected createInboundFileSystem(): FileSystemReader | null {
-    return this.localData.read.contactData != null &&
-      this.localData.read.contactData.fileSystemKey != null
+    const { read, write } = this.data
+    return read.contactData != null && read.contactData.fileSystemKey != null
       ? new FileSystemReader({
           sync: this.sync,
-          writer: this.localData.read.contactData.fileSystemKey,
-          keyPair: this.localData.write.keyPair,
+          writer: read.contactData.fileSystemKey,
+          keyPair: write.keyPair,
         })
       : null
   }
@@ -343,34 +329,34 @@ export class ContactAgent {
   }
 
   public async createOutboundFileSystem(): Promise<KeyPair> {
-    if (this.localData.write.fileSystemKeyPair == null) {
-      this.localData.write.fileSystemKeyPair = createKeyPair()
+    if (this.data.write.fileSystemKeyPair == null) {
+      this.data.write.fileSystemKeyPair = createKeyPair()
       this.outboundFileSystem = new FileSystemWriter({
-        keyPair: this.localData.write.fileSystemKeyPair,
+        keyPair: this.data.write.fileSystemKeyPair,
         sync: this.sync,
       })
       await this.pushContactData()
     }
-    return this.localData.write.fileSystemKeyPair
+    return this.data.write.fileSystemKeyPair
   }
 
   public async createOutboxes(): Promise<boolean> {
     if (this.outboxes != null) {
       return true
     }
-    if (this.localData.read.contactPublicKey == null) {
+    if (this.data.read.contactPublicKey == null) {
       return false
     }
     this.outboxes = new OutboxesAgent({
       sync: this.sync,
-      reader: this.localData.read.contactPublicKey,
-      outboxes: this.localData.write.mailboxes,
+      reader: this.data.read.contactPublicKey,
+      outboxes: this.data.write.mailboxes,
     })
     return await this.pushContactData()
   }
 
   public async setProfile(profile: ProfileData): Promise<void> {
-    this.localData.write.profile = profile
+    this.data.write.profile = profile
     await this.pushContactData()
   }
 }

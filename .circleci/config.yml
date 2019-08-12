@@ -1,4 +1,4 @@
-version: 2.1
+version: 2
 
 jobs:
   build:
@@ -10,6 +10,7 @@ jobs:
           PASSWORD: password123
         command:
           - >
+            --bzznetworkid=255
             --nosync
             --maxpeers=0
             --verbosity=4
