@@ -38,11 +38,11 @@ jobs:
             - node_modules
           key: deps-{{ checksum "yarn.lock" }}
       - run:
-          name: Check and build packages
-          command: yarn lint && yarn build
+          name: Build packages
+          command: yarn build
       - run:
           name: Tests
-          command: yarn test:ci
+          command: yarn lint && yarn test:ci
           environment:
             JEST_JUNIT_OUTPUT: '/tmp/test-reports/jest/results.xml'
       - store_test_results:

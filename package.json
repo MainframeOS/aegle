@@ -21,7 +21,7 @@
     "test:ci": "BABEL_ENV=test jest --ci --config jest.config.ci.js",
     "test:all": "yarn lint && yarn test",
     "build": "lerna run build",
-    "start": "yarn lint && yarn build && yarn test"
+    "start": "yarn build && yarn test:all"
   },
   "devDependencies": {
     "@babel/cli": "^7.5.5",
