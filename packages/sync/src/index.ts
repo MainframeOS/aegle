@@ -1,8 +1,9 @@
 import {
-  AegleCore,
+  Core,
   EntityPayload,
+  decodeStream,
   encodePayload,
-  getBodyStream,
+  fromBuffer,
 } from '@aegle/core'
 import {
   BaseResponse,
@@ -21,7 +22,6 @@ import {
   Timeline,
   validateChapter,
 } from '@erebos/timeline'
-import getStream from 'get-stream'
 import PQueue from 'p-queue'
 import { Observable } from 'rxjs'
 import { flatMap } from 'rxjs/operators'
@@ -95,7 +95,6 @@ export function getFeedWriteParams(
     signParams: keyPair.getPrivate(),
   }
 }
-
 export interface ChannelParams {
   entityType: string
   name?: string
@@ -116,18 +115,18 @@ export interface SubscriberParams extends ReaderParams {
   options: PollContentOptions
 }
 
-export interface AegleSyncConfig {
+export interface SyncConfig {
   bzz: Bzz
-  core: AegleCore
+  core?: Core
 }
 
-export class AegleSync {
+export class Sync {
   public bzz: Bzz
-  public core: AegleCore
+  public core: Core
 
-  public constructor(config: AegleSyncConfig) {
+  public constructor(config: SyncConfig) {
     this.bzz = config.bzz
-    this.core = config.core
+    this.core = config.core || new Core()
   }
 
   public createPublisher<T, U>(push: (data: T) => Promise<U>) {
@@ -267,9 +266,8 @@ export class AegleSync {
     )
 
     const decode = async (res: BaseResponse<NodeJS.ReadableStream>) => {
-      const stream = await getBodyStream(res.body, { key: encryptionKey })
-      const body = await getStream(stream)
-      const chapter = validateChapter(JSON.parse(body))
+      const body = await decodeStream(res.body, { key: encryptionKey })
+      const chapter = validateChapter(fromBuffer(body))
       await this.core.validateEntity(chapter.content)
       return chapter
     }

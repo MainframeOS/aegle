@@ -14,14 +14,17 @@
   "scripts": {
     "clean": "del lib types",
     "build:js": "BABEL_ENV=node babel src --out-dir lib --extensions \".ts\"",
-    "build:types": "tsc --emitDeclarationOnly",
+    "build:types": "tsc --emitDeclarationOnly -p tsconfig.build.json",
     "build": "yarn clean && yarn build:js && yarn build:types",
-    "test:types": "tsc --noEmit",
+    "test:types": "tsc --noEmit -p tsconfig.build.json",
     "prepublishOnly": "yarn build"
   },
   "dependencies": {
     "@erebos/api-bzz-node": "^0.9.0",
     "ajv": "^6.10.2",
     "get-stream": "^5.1.0"
+  },
+  "devDependencies": {
+    "@types/node-fetch": "^2.5.0"
   }
 }

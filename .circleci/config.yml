@@ -1,4 +1,4 @@
-version: 2.1
+version: 2
 
 jobs:
   build:
@@ -10,6 +10,7 @@ jobs:
           PASSWORD: password123
         command:
           - >
+            --bzznetworkid=255
             --nosync
             --maxpeers=0
             --verbosity=4
@@ -37,8 +38,11 @@ jobs:
             - node_modules
           key: deps-{{ checksum "yarn.lock" }}
       - run:
-          name: Project tests
-          command: yarn test:ci
+          name: Build packages
+          command: yarn build
+      - run:
+          name: Tests
+          command: yarn lint && yarn test:ci
           environment:
             JEST_JUNIT_OUTPUT: '/tmp/test-reports/jest/results.xml'
       - store_test_results:

@@ -1,7 +1,6 @@
 import ajv from 'ajv'
-import getStream from 'get-stream'
 
-import { encodePayload, getBodyStream } from './encoding'
+import { decodeStream, encodePayload } from './encoding'
 import { getID } from './namespace'
 import { fromBuffer } from './utils'
 import { DecodeParams, EncodeParams, EntityPayload } from './types'
@@ -17,8 +16,9 @@ export * from './crypto'
 export * from './encoding'
 export * from './namespace'
 export * from './types'
+export * from './utils'
 
-export class AegleCore {
+export class Core {
   private ajv: ajv.Ajv
 
   public constructor() {
@@ -45,27 +45,20 @@ export class AegleCore {
     return await this.validateEntity<T>(fromBuffer(buffer))
   }
 
-  public async validateStream<T = any>(
-    stream: NodeJS.ReadableStream,
-  ): Promise<EntityPayload<T>> {
-    const buffer = await getStream.buffer(stream)
-    return await this.validateBuffer<T>(buffer)
-  }
-
   public async decodeEntityStream<T>(
     stream: NodeJS.ReadableStream,
     params: DecodeParams = {},
   ): Promise<EntityPayload<T>> {
-    const bodyStream = await getBodyStream(stream, params)
-    return await this.validateStream(bodyStream)
+    const buffer = await decodeStream(stream, params)
+    return await this.validateBuffer<T>(buffer)
   }
 
-  public async encodeEntity(
+  public async encodeEntity<T = any>(
     type: string,
-    data: any,
+    data: T,
     params: EncodeParams = {},
   ): Promise<Buffer> {
-    const payload = await this.validateEntity({ type, data })
+    const payload = await this.validateEntity<T>({ type, data })
     return await encodePayload(payload, params)
   }
 }

@@ -1,3 +1,5 @@
+import getStream from 'get-stream'
+
 import {
   AEGLE_BYTE,
   CRYPTO_ALGORITHM,
@@ -6,10 +8,10 @@ import {
 } from './constants'
 import { createDecipher, encryptJSON } from './crypto'
 import { DecodeParams, EncodeParams, PayloadHeaders } from './types'
-import { CheckMaxSize, fromBuffer, toBuffer } from './utils'
+import { fromBuffer, toBuffer } from './utils'
 
-export function decodeHeaderSize(buffer: Buffer): number {
-  if (buffer.length !== HEADER_SIZE_BYTES) {
+export function decodeHeaderSize(buffer?: Buffer): number {
+  if (buffer == null || buffer.length !== HEADER_SIZE_BYTES) {
     throw new Error('Invalid input')
   }
   return parseInt(buffer.toString('hex'), 16)
@@ -23,11 +25,11 @@ export function encodeHeaderSize(size: number): Buffer {
   return Buffer.from(hex, 'hex')
 }
 
-export async function getBodyStream(
+export async function decodeStream(
   stream: NodeJS.ReadableStream,
   params: DecodeParams = {},
-): Promise<NodeJS.ReadableStream> {
-  return new Promise((resolve, reject): void => {
+): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
     stream.on('error', err => {
       reject(err)
     })
@@ -52,18 +54,13 @@ export async function getBodyStream(
           params.maxSize != null &&
           headers.size > params.maxSize
         ) {
-          throw new Error('Body exceeds max size')
+          throw new Error('Body exceeds maximum allowed size')
         }
-
-        // Check max size is respected
-        const maxSize = params.maxSize || headers.size || null
-        const checkedStream =
-          maxSize === null ? stream : stream.pipe(new CheckMaxSize(maxSize))
 
         // Decrypt stream if encrypted
         let bodyStream
         if (headers.encryption == null) {
-          bodyStream = checkedStream
+          bodyStream = stream
         } else {
           if (params.key == null) {
             throw new Error('Missing key to attempt decryption')
@@ -72,7 +69,16 @@ export async function getBodyStream(
             createDecipher(params.key, headers.encryption),
           )
         }
-        resolve(bodyStream)
+
+        // Check max size is respected
+        let maxBuffer = headers.size
+        if (params.maxSize != null) {
+          maxBuffer = headers.size
+            ? Math.min(params.maxSize, headers.size)
+            : params.maxSize
+        }
+
+        getStream.buffer(bodyStream, { maxBuffer }).then(resolve, reject)
       } catch (err) {
         reject(err)
       }
@@ -85,6 +91,7 @@ export async function encodePayload(
   params: EncodeParams = {},
 ): Promise<Buffer> {
   const headers: PayloadHeaders = {}
+
   let body
   if (params.key == null) {
     body = toBuffer(payload)
