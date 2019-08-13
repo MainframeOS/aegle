@@ -2,6 +2,7 @@ import {
   MAILBOX_NAME,
   MESSAGE_NAME,
   EntityPayload,
+  MailboxesRecord,
   MessageData,
 } from '@aegle/core'
 import { Sync } from '@aegle/sync'
@@ -117,6 +118,20 @@ export class InboxAgent {
     }
     return this
   }
+
+  public isWriter(key: string): boolean {
+    return this.params.writer === key
+  }
+
+  public setWriter(key: string): InboxAgent {
+    if (this.params.writer !== key) {
+      this.params.writer = key
+      if (this.subscription !== null) {
+        this.start()
+      }
+    }
+    return this
+  }
 }
 
 export interface InboxAgentData {
@@ -216,6 +231,28 @@ export class InboxesAgent {
       sub.unsubscribe()
       delete this.inboxSubscriptions[label]
     }
+    return this
+  }
+
+  public changeInboxes(mailboxes: MailboxesRecord): InboxesAgent {
+    const labels: Array<string> = []
+
+    Object.entries(mailboxes).forEach(([label, key], index) => {
+      labels.push(label)
+      const inbox = this.inboxes[label]
+      if (inbox == null) {
+        this.addInbox(label, { writer: key })
+      } else if (!inbox.isWriter(key)) {
+        inbox.setWriter(key)
+      }
+    })
+
+    Object.keys(this.inboxes).forEach(label => {
+      if (!labels.includes(label)) {
+        this.removeInbox(label)
+      }
+    })
+
     return this
   }
 }

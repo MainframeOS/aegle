@@ -243,6 +243,7 @@ export class Sync {
 
     return this.bzz
       .pollFeedContent(feed, {
+        changedOnly: true,
         whenEmpty: 'ignore',
         ...params.options,
         mode: 'raw',

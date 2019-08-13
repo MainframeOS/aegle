@@ -147,12 +147,11 @@ export class ActorAgent {
         },
         write: {
           keyPair: createKeyPair(),
-          firstContactWritten: false,
+          firstContact: {
+            keyPair: this.data.actor.keyPair,
+            actorKey: actorData.publicKey,
+          },
         },
-      },
-      firstContact: {
-        keyPair: this.data.actor.keyPair,
-        actorKey: actorData.publicKey,
       },
     })
     await contact.initialize()

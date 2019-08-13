@@ -19,6 +19,7 @@ import {
   createContactSubscriber,
   writeContact,
   readContact,
+  ContactAgent,
   // messaging
   createMailboxWriter,
   createMailboxReader,
@@ -205,10 +206,246 @@ describe('agent', () => {
         sendContact,
       )
     })
+
+    describe('ContactAgent class', () => {
+      test('establishes first contact if needed and provided', async done => {
+        const aliceActorKeyPair = createKeyPair()
+        const aliceContactKeyPair = createKeyPair()
+        const bobActorKeyPair = createKeyPair()
+        const bobContactKeyPair = createKeyPair()
+
+        const alice = new ContactAgent({
+          sync,
+          data: {
+            read: {
+              actorAddress: getPublicAddress(bobActorKeyPair),
+              firstContact: {
+                keyPair: aliceActorKeyPair,
+                actorKey: bobActorKeyPair.getPublic('hex'),
+              },
+            },
+            write: {
+              keyPair: aliceContactKeyPair,
+            },
+          },
+          autoStart: true,
+          interval: 1000,
+        })
+
+        const bob = new ContactAgent({
+          sync,
+          data: {
+            read: {
+              actorAddress: getPublicAddress(aliceActorKeyPair),
+              contactPublicKey: aliceContactKeyPair.getPublic('hex'),
+            },
+            write: {
+              keyPair: bobContactKeyPair,
+              firstContact: {
+                keyPair: bobActorKeyPair,
+                actorKey: aliceActorKeyPair.getPublic('hex'),
+              },
+            },
+          },
+        })
+
+        expect(alice.connected$.value).toBe(false)
+        expect(bob.connected$.value).toBe(true)
+
+        alice.connected$.subscribe({
+          next: connected => {
+            if (connected) {
+              alice.stop()
+              bob.stop()
+              done()
+            }
+          },
+        })
+
+        await bob.initialize()
+      })
+
+      test('publishes and subscribes to contact feed', async done => {
+        const aliceActorKeyPair = createKeyPair()
+        const aliceContactKeyPair = createKeyPair()
+        const bobActorKeyPair = createKeyPair()
+        const bobContactKeyPair = createKeyPair()
+
+        const alice = new ContactAgent({
+          sync,
+          data: {
+            read: {
+              actorAddress: getPublicAddress(bobActorKeyPair),
+              contactPublicKey: bobContactKeyPair.getPublic('hex'),
+            },
+            write: {
+              keyPair: aliceContactKeyPair,
+            },
+          },
+          autoStart: true,
+          interval: 1000,
+        })
+
+        const bob = new ContactAgent({
+          sync,
+          data: {
+            read: {
+              actorAddress: getPublicAddress(aliceActorKeyPair),
+              contactPublicKey: aliceContactKeyPair.getPublic('hex'),
+            },
+            write: {
+              keyPair: bobContactKeyPair,
+            },
+          },
+          autoStart: true,
+          interval: 1000,
+        })
+
+        expect(alice.connected$.value).toBe(true)
+        expect(bob.connected$.value).toBe(true)
+
+        alice.data$.subscribe({
+          next: data => {
+            if (
+              data != null &&
+              data.profile != null &&
+              data.profile.displayName === 'Bobby'
+            ) {
+              alice.stop()
+              bob.stop()
+              done()
+            }
+          },
+        })
+
+        await bob.setProfile({ displayName: 'Bobby' })
+      })
+
+      test('inboxes and outboxes', async done => {
+        const aliceActorKeyPair = createKeyPair()
+        const aliceContactKeyPair = createKeyPair()
+        const bobActorKeyPair = createKeyPair()
+        const bobContactKeyPair = createKeyPair()
+
+        const alice = new ContactAgent({
+          sync,
+          data: {
+            read: {
+              actorAddress: getPublicAddress(bobActorKeyPair),
+              contactPublicKey: bobContactKeyPair.getPublic('hex'),
+            },
+            write: {
+              keyPair: aliceContactKeyPair,
+            },
+          },
+          autoStart: true,
+          interval: 1000,
+        })
+
+        const bob = new ContactAgent({
+          sync,
+          data: {
+            read: {
+              actorAddress: getPublicAddress(aliceActorKeyPair),
+              contactPublicKey: aliceContactKeyPair.getPublic('hex'),
+            },
+            write: {
+              keyPair: bobContactKeyPair,
+            },
+          },
+          autoStart: true,
+          interval: 1000,
+        })
+
+        await alice.addOutbox('test')
+        await alice.outboxes.sendMessage('test', { body: 'hello' })
+
+        bob.data$.subscribe({
+          next: async () => {
+            const inbox = bob.inboxes.getInbox('test')
+            if (inbox != null) {
+              inbox.start()
+              inbox.newMessage$.subscribe({
+                next: msg => {
+                  if (msg.body === 'world') {
+                    alice.stopAll()
+                    bob.stopAll()
+                    done()
+                  }
+                },
+              })
+              await alice.outboxes.sendMessage('test', { body: 'world' })
+            }
+          },
+        })
+      })
+
+      test('inboundFileSystem and outboundFileSystem', async done => {
+        jest.setTimeout(15000)
+
+        const aliceActorKeyPair = createKeyPair()
+        const aliceContactKeyPair = createKeyPair()
+        const bobActorKeyPair = createKeyPair()
+        const bobContactKeyPair = createKeyPair()
+
+        const alice = new ContactAgent({
+          sync,
+          data: {
+            read: {
+              actorAddress: getPublicAddress(bobActorKeyPair),
+              contactPublicKey: bobContactKeyPair.getPublic('hex'),
+            },
+            write: {
+              keyPair: aliceContactKeyPair,
+            },
+          },
+          autoStart: true,
+          interval: 1000,
+        })
+
+        const bob = new ContactAgent({
+          sync,
+          data: {
+            read: {
+              actorAddress: getPublicAddress(aliceActorKeyPair),
+              contactPublicKey: aliceContactKeyPair.getPublic('hex'),
+            },
+            write: {
+              keyPair: bobContactKeyPair,
+            },
+          },
+          autoStart: true,
+          interval: 1000,
+        })
+
+        await alice.createOutboundFileSystem()
+        const outFS = alice.outboundFileSystem
+        await outFS.uploadFile('/test', 'hello')
+        await outFS.push()
+
+        bob.data$.subscribe({
+          next: async data => {
+            const fs = bob.inboundFileSystem
+            if (fs != null) {
+              const sub = fs.files.subscribe({
+                next: () => {
+                  if (fs.hasFile('/test')) {
+                    sub.unsubscribe()
+                    alice.stopAll()
+                    bob.stopAll()
+                    done()
+                  }
+                },
+              })
+              await fs.pull()
+            }
+          },
+        })
+      })
+    })
   })
 
   describe('fileSystem protocol', () => {
-    // TODO: also test with a steam as input
     test('uploadFile() and downloadFile() with encryption', async () => {
       const data = 'Hello test'
       const file = await uploadFile(sync, data, { encrypt: true })
@@ -230,6 +467,8 @@ describe('agent', () => {
       const text = await getStream(res)
       expect(text).toBe('Hello test')
     })
+
+    test.todo('uploadFile() and downloadFile() with streams')
 
     // This doesn't work - need more investigation
     test.skip('uploadFile() supports a stream as input', async () => {

@@ -9,7 +9,7 @@ import {
 import { Sync, getPublicAddress } from '@aegle/sync'
 import { hexValue } from '@erebos/hex'
 import { KeyPair, createKeyPair } from '@erebos/secp256k1'
-import { BehaviorSubject, Observable, Subscription } from 'rxjs'
+import { BehaviorSubject, Observable, Subject, Subscription } from 'rxjs'
 import { map } from 'rxjs/operators'
 
 import { FileSystemReader, FileSystemWriter } from './fileSystem'
@@ -118,17 +118,23 @@ export function createFirstContactSubscriber(
     .pipe(map((payload: any) => payload.data))
 }
 
+export interface FirstContactAgentData {
+  keyPair: KeyPair
+  actorKey: string
+}
+
 export interface ReadContactAgentData {
   actorAddress: string
   actorData?: ActorData
   contactPublicKey?: string // If knows, means first contact has been established
   contactData?: ContactData
+  firstContact?: FirstContactAgentData
 }
 
 export interface WriteContactAgentData {
   keyPair: KeyPair
-  firstContactWritten: boolean
   fileSystemKeyPair?: KeyPair
+  firstContact?: FirstContactAgentData
   mailboxes?: Record<string, KeyPair>
   profile?: ProfileData
 }
@@ -138,16 +144,16 @@ export interface ContactAgentData {
   write: WriteContactAgentData
 }
 
-export interface FirstContactAgentData {
-  keyPair: KeyPair
-  actorKey: string
+export interface ContactAgentError {
+  type: 'firstContact' | 'contact'
+  error: Error
 }
 
 export interface ContactAgentParams {
   sync: Sync
   data: ContactAgentData
-  firstContact?: FirstContactAgentData
   interval?: number
+  autoStart?: boolean
 }
 
 export class ContactAgent {
@@ -156,40 +162,27 @@ export class ContactAgent {
   private inFS: FileSystemReader | null
 
   protected data: ContactAgentData
-  protected firstContact: FirstContactAgentData | void
   protected interval: number
   protected sync: Sync
 
   public connected$: BehaviorSubject<boolean>
   public data$: BehaviorSubject<ContactData | null>
+  public error$: Subject<ContactAgentError>
   public inboxes: InboxesAgent
   public outboxes: OutboxesAgent | null = null
   public outboundFileSystem: FileSystemWriter | null = null
 
   public constructor(params: ContactAgentParams) {
     this.data = params.data
-    this.firstContact = params.firstContact
     this.interval = params.interval || POLL_INTERVAL
     this.sync = params.sync
 
     const { read, write } = this.data
 
     this.inFS = this.createInboundFileSystem()
-    if (write.fileSystemKeyPair != null) {
-      this.outboundFileSystem = new FileSystemWriter({
-        keyPair: write.fileSystemKeyPair,
-        sync: this.sync,
-      })
-    }
-
     this.connected$ = new BehaviorSubject(read.contactPublicKey != null)
-    if (this.connected$.value) {
-      this.createContactSubscription(read.contactPublicKey as string)
-    } else if (this.firstContact != null) {
-      this.createFirstContactSubscription(this.firstContact)
-    }
-
     this.data$ = new BehaviorSubject(read.contactData || null)
+    this.error$ = new Subject()
 
     const inboxes: Record<string, InboxAgentData> = {}
     if (read.contactData != null && read.contactData.mailboxes != null) {
@@ -203,6 +196,7 @@ export class ContactAgent {
       sync: this.sync,
       keyPair: write.keyPair,
       inboxes,
+      interval: params.interval,
     })
 
     if (read.contactPublicKey != null) {
@@ -211,6 +205,18 @@ export class ContactAgent {
         reader: read.contactPublicKey,
         outboxes: write.mailboxes,
       })
+
+      if (write.fileSystemKeyPair != null) {
+        this.outboundFileSystem = new FileSystemWriter({
+          sync: this.sync,
+          keyPair: write.fileSystemKeyPair,
+          reader: read.contactPublicKey,
+        })
+      }
+    }
+
+    if (params.autoStart) {
+      this.start()
     }
   }
 
@@ -246,17 +252,18 @@ export class ContactAgent {
     return true
   }
 
-  public async initialize() {
+  public async initialize(): Promise<void> {
+    const { write } = this.data
     const calls: Array<Promise<any>> = []
 
     // Write first contact information if provided
-    if (this.firstContact != null) {
+    if (write.firstContact != null) {
       calls.push(
         writeFirstContact(
-          { ...this.firstContact, sync: this.sync },
+          { ...write.firstContact, sync: this.sync },
           {
-            contactPublicKey: this.data.write.keyPair.getPublic('hex'),
-            actorAddress: getPublicAddress(this.firstContact.keyPair),
+            contactPublicKey: write.keyPair.getPublic('hex'),
+            actorAddress: getPublicAddress(write.firstContact.keyPair),
           },
         ),
       )
@@ -290,6 +297,9 @@ export class ContactAgent {
         }
         this.connected$.next(true)
       },
+      error: err => {
+        this.error$.next({ type: 'firstContact', error: err })
+      },
     })
   }
 
@@ -304,10 +314,43 @@ export class ContactAgent {
       contactKey,
     }).subscribe({
       next: (data: ContactData) => {
+        this.inboxes.changeInboxes(data.mailboxes || {})
         this.data.read.contactData = data
         this.data$.next(data)
       },
+      error: err => {
+        this.error$.next({ type: 'contact', error: err })
+      },
     })
+  }
+
+  public start(): void {
+    if (this.connected$.value) {
+      this.createContactSubscription(this.data.read.contactPublicKey as string)
+    } else if (this.data.read.firstContact != null) {
+      this.createFirstContactSubscription(this.data.read.firstContact)
+    }
+  }
+
+  public startAll(): void {
+    this.start()
+    this.inboxes.startAll()
+  }
+
+  public stop(): void {
+    if (this.contactSub != null) {
+      this.contactSub.unsubscribe()
+      this.contactSub = null
+    }
+    if (this.firstContactSub != null) {
+      this.firstContactSub.unsubscribe()
+      this.firstContactSub = null
+    }
+  }
+
+  public stopAll(): void {
+    this.stop()
+    this.inboxes.stopAll()
   }
 
   protected createInboundFileSystem(): FileSystemReader | null {
@@ -328,16 +371,21 @@ export class ContactAgent {
     return this.inFS
   }
 
-  public async createOutboundFileSystem(): Promise<KeyPair> {
-    if (this.data.write.fileSystemKeyPair == null) {
-      this.data.write.fileSystemKeyPair = createKeyPair()
-      this.outboundFileSystem = new FileSystemWriter({
-        keyPair: this.data.write.fileSystemKeyPair,
-        sync: this.sync,
-      })
-      await this.pushContactData()
+  public async createOutboundFileSystem(): Promise<boolean> {
+    const { read, write } = this.data
+    if (write.fileSystemKeyPair != null) {
+      return true
     }
-    return this.data.write.fileSystemKeyPair
+    if (read.contactPublicKey == null) {
+      return false
+    }
+    this.data.write.fileSystemKeyPair = createKeyPair()
+    this.outboundFileSystem = new FileSystemWriter({
+      sync: this.sync,
+      keyPair: this.data.write.fileSystemKeyPair,
+      reader: read.contactPublicKey,
+    })
+    return await this.pushContactData()
   }
 
   public async createOutboxes(): Promise<boolean> {
@@ -355,8 +403,22 @@ export class ContactAgent {
     return await this.pushContactData()
   }
 
-  public async setProfile(profile: ProfileData): Promise<void> {
+  public async addOutbox(label: string): Promise<boolean> {
+    if (this.data.write.mailboxes == null) {
+      this.data.write.mailboxes = {}
+    }
+    this.data.write.mailboxes[label] = createKeyPair()
+
+    if (this.outboxes == null) {
+      return await this.createOutboxes()
+    } else {
+      this.outboxes.setOutbox(label, this.data.write.mailboxes[label])
+      return await this.pushContactData()
+    }
+  }
+
+  public async setProfile(profile: ProfileData): Promise<boolean> {
     this.data.write.profile = profile
-    await this.pushContactData()
+    return await this.pushContactData()
   }
 }

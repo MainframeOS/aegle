@@ -152,9 +152,12 @@ export interface FileSystemReaderParams extends FileSystemParams {
   keyPair?: KeyPair
 }
 
+// TODO: add start() and stop() methods to run subscriptions, similar to mailboxes classes
+
 export class FileSystemReader extends FileSystem {
   private read: () => Promise<FileSystemData | null>
 
+  public error: Error | undefined
   public pullSync: BehaviorSubject<FileSystemPullSyncState>
 
   public constructor(params: FileSystemReaderParams) {
@@ -176,12 +179,14 @@ export class FileSystemReader extends FileSystem {
     if (this.pullSync.value !== FileSystemPullSyncState.PULLING) {
       this.pullSync.next(FileSystemPullSyncState.PULLING)
       try {
+        this.error = undefined
         const fs = await this.read()
         if (fs != null) {
           this.files.next(fs.files)
         }
         this.pullSync.next(FileSystemPullSyncState.DONE)
       } catch (err) {
+        this.error = err
         this.pullSync.next(FileSystemPullSyncState.FAILED)
       }
     }
@@ -204,6 +209,7 @@ export class FileSystemWriter extends FileSystem {
   private publishQueue: PQueue
 
   public changes: BehaviorSubject<FileSystemChanges>
+  public error: Error | undefined
   public pullSync: BehaviorSubject<FileSystemPullSyncState>
   public pushSync: BehaviorSubject<FileSystemPushSyncState>
 
@@ -238,6 +244,7 @@ export class FileSystemWriter extends FileSystem {
   protected async publish(): Promise<void> {
     this.pushSync.next(FileSystemPushSyncState.PUSHING)
     try {
+      this.error = undefined
       const payload = await encodePayload(
         { type: FILE_SYSTEM_NAME, data: { files: this.files.value } },
         { key: this.feedParams.encryptionKey },
@@ -250,6 +257,7 @@ export class FileSystemWriter extends FileSystem {
       )
       this.pushSync.next(FileSystemPushSyncState.IDLE)
     } catch (err) {
+      this.error = err
       this.pushSync.next(FileSystemPushSyncState.FAILED)
     }
   }
