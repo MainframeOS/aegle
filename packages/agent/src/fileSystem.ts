@@ -14,12 +14,14 @@ import {
 } from '@aegle/core'
 import { FeedWriteParams, Sync, getFeedWriteParams } from '@aegle/sync'
 import { KeyPair } from '@erebos/secp256k1'
+// eslint-disable-next-line import/default
 import getStream from 'get-stream'
 import PQueue from 'p-queue'
-import { BehaviorSubject } from 'rxjs'
+import { BehaviorSubject, Subscription, interval } from 'rxjs'
+import { flatMap } from 'rxjs/operators'
 
 const PATH_RE = new RegExp('^(/[^/]+)+$', 'i')
-
+const POLL_INTERVAL = 120 * 1000 // 2 mins
 export interface FileUploadParams extends FileMetadata {
   encrypt?: boolean
 }
@@ -150,11 +152,15 @@ enum FileSystemPushSyncState {
 export interface FileSystemReaderParams extends FileSystemParams {
   writer: string
   keyPair?: KeyPair
+  interval?: number
+  autoStart?: boolean
 }
 
-// TODO: add start() and stop() methods to run subscriptions, similar to mailboxes classes
-
 export class FileSystemReader extends FileSystem {
+  private interval: number
+  private keyPair: KeyPair | undefined
+  private subscription: Subscription | undefined
+  private writer: string
   private read: () => Promise<FileSystemData | null>
 
   public error: Error | undefined
@@ -163,16 +169,39 @@ export class FileSystemReader extends FileSystem {
   public constructor(params: FileSystemReaderParams) {
     super(params)
 
+    this.interval = params.interval || POLL_INTERVAL
+    this.keyPair = params.keyPair
+    this.writer = params.writer
+
     this.pullSync = new BehaviorSubject(
       FileSystemPullSyncState.PENDING as FileSystemPullSyncState,
     )
-
     this.read = this.sync.createFeedReader<FileSystemData>({
-      writer: params.writer,
-      keyPair: params.keyPair,
+      writer: this.writer,
+      keyPair: this.keyPair,
       entityType: FILE_SYSTEM_NAME,
       name: FILE_SYSTEM_NAME,
     })
+
+    if (params.autoStart) {
+      this.start()
+    }
+  }
+
+  public start(period?: number): void {
+    if (this.subscription != null) {
+      this.subscription.unsubscribe()
+    }
+    this.subscription = interval(period || this.interval)
+      .pipe(flatMap(async () => await this.pull()))
+      .subscribe()
+  }
+
+  public stop(): void {
+    if (this.subscription != null) {
+      this.subscription.unsubscribe()
+      this.subscription = undefined
+    }
   }
 
   public async pull(): Promise<void> {
@@ -202,11 +231,15 @@ export interface FileSystemWriterParams extends FileSystemParams {
   keyPair: KeyPair
   files?: FilesRecord
   reader?: string
+  interval?: number
+  autoStart?: boolean
 }
 
 export class FileSystemWriter extends FileSystem {
   private feedParams: FeedWriteParams
+  private interval: number
   private publishQueue: PQueue
+  private subscription: Subscription | undefined
 
   public changes: BehaviorSubject<FileSystemChanges>
   public error: Error | undefined
@@ -221,6 +254,7 @@ export class FileSystemWriter extends FileSystem {
       FILE_SYSTEM_NAME,
       params.reader,
     )
+    this.interval = params.interval || POLL_INTERVAL
     this.publishQueue = new PQueue({ concurrency: 1 })
 
     const hasFiles = params.files != null
@@ -234,6 +268,10 @@ export class FileSystemWriter extends FileSystem {
     this.pushSync = new BehaviorSubject(
       FileSystemPushSyncState.IDLE as FileSystemPushSyncState,
     )
+
+    if (params.autoStart) {
+      this.start()
+    }
   }
 
   protected setLocalFiles(files: FilesRecord): void {
@@ -287,6 +325,22 @@ export class FileSystemWriter extends FileSystem {
     }
   }
 
+  public start(period?: number): void {
+    if (this.subscription != null) {
+      this.subscription.unsubscribe()
+    }
+    this.subscription = interval(period || this.interval)
+      .pipe(flatMap(async () => await this.push()))
+      .subscribe()
+  }
+
+  public stop(): void {
+    if (this.subscription != null) {
+      this.subscription.unsubscribe()
+      this.subscription = undefined
+    }
+  }
+
   public async push(): Promise<void> {
     if (this.changes.value.sync) {
       // Nothing new to push
@@ -301,7 +355,6 @@ export class FileSystemWriter extends FileSystem {
     if (this.changes.value.timestamp === timestamp) {
       this.changes.next({ sync: true, timestamp })
     }
-    // TODO: should there be a "sync strategy" to automatically sync at a given interval, or when any change is made?
   }
 
   public setFile(path: string, file: FileData): void {

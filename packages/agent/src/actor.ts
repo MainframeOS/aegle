@@ -52,7 +52,9 @@ export async function writeActor(
   )
 }
 
-export function createActorWriter(params: ActorWriterParams) {
+export function createActorWriter(
+  params: ActorWriterParams,
+): (data: ActorData) => Promise<hexValue> {
   return params.sync.createFeedPublisher<ActorData>({
     ...FEED_PARAMS,
     keyPair: params.keyPair,

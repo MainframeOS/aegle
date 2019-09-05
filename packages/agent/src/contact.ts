@@ -157,6 +157,7 @@ export interface ContactAgentParams {
 }
 
 export class ContactAgent {
+  private autoStart: boolean
   private firstContactSub: Subscription | null = null
   private contactSub: Subscription | null = null
   private inFS: FileSystemReader | null
@@ -173,6 +174,7 @@ export class ContactAgent {
   public outboundFileSystem: FileSystemWriter | null = null
 
   public constructor(params: ContactAgentParams) {
+    this.autoStart = params.autoStart || false
     this.data = params.data
     this.interval = params.interval || POLL_INTERVAL
     this.sync = params.sync
@@ -197,6 +199,7 @@ export class ContactAgent {
       keyPair: write.keyPair,
       inboxes,
       interval: params.interval,
+      autoStart: this.autoStart,
     })
 
     if (read.contactPublicKey != null) {
@@ -211,12 +214,13 @@ export class ContactAgent {
           sync: this.sync,
           keyPair: write.fileSystemKeyPair,
           reader: read.contactPublicKey,
+          autoStart: this.autoStart,
         })
       }
     }
 
-    if (params.autoStart) {
-      this.start()
+    if (this.autoStart) {
+      this.startAll()
     }
   }
 
@@ -351,6 +355,12 @@ export class ContactAgent {
   public stopAll(): void {
     this.stop()
     this.inboxes.stopAll()
+    if (this.inFS != null) {
+      this.inFS.stop()
+    }
+    if (this.outboundFileSystem != null) {
+      this.outboundFileSystem.stop()
+    }
   }
 
   protected createInboundFileSystem(): FileSystemReader | null {
@@ -360,6 +370,7 @@ export class ContactAgent {
           sync: this.sync,
           writer: read.contactData.fileSystemKey,
           keyPair: write.keyPair,
+          autoStart: this.autoStart,
         })
       : null
   }
@@ -384,6 +395,7 @@ export class ContactAgent {
       sync: this.sync,
       keyPair: this.data.write.fileSystemKeyPair,
       reader: read.contactPublicKey,
+      autoStart: this.autoStart,
     })
     return await this.pushContactData()
   }

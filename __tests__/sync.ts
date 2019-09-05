@@ -126,7 +126,7 @@ describe('sync', () => {
     const sync = new Sync({
       bzz: new Bzz({
         url: 'http://localhost:8500',
-        signBytes: async (bytes, key) => sign(bytes, key),
+        signBytes: (bytes, key) => Promise.resolve(sign(bytes, key)),
       }),
       core: new Core(),
     })

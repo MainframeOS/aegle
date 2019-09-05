@@ -129,7 +129,9 @@ export class Sync {
     this.core = config.core || new Core()
   }
 
-  public createPublisher<T, U>(push: (data: T) => Promise<U>) {
+  public createPublisher<T, U>(
+    push: (data: T) => Promise<U>,
+  ): (entity: T) => Promise<U> {
     const queue = new PQueue({ concurrency: 1 })
     return async (entity: T): Promise<U> => {
       return await queue.add(() => push(entity))
@@ -148,7 +150,9 @@ export class Sync {
     return await this.bzz.setFeedContent(feed, payload, undefined, signParams)
   }
 
-  public createFeedPublisher<T>(params: WriterParams) {
+  public createFeedPublisher<T>(
+    params: WriterParams,
+  ): (entity: T) => Promise<hexValue> {
     const { feed, encryptionKey, signParams } = getFeedWriteParams(
       params.keyPair,
       params.name,
@@ -163,7 +167,7 @@ export class Sync {
     return this.createPublisher<T, hexValue>(push)
   }
 
-  public createWriteTimeline<T>(params: WriterParams) {
+  public createWriteTimeline<T>(params: WriterParams): Timeline<T> {
     const { feed, encryptionKey, signParams } = getFeedWriteParams(
       params.keyPair,
       params.name,
@@ -177,14 +181,18 @@ export class Sync {
       }
     }
 
-    return new Timeline({ bzz: this.bzz, feed, encode, signParams })
+    return new Timeline<T>({ bzz: this.bzz, feed, encode, signParams })
   }
 
-  public createTimelinePublisher<T>(params: WriterParams) {
-    const add = this.createWriteTimeline(params).createAddChapter()
+  public createTimelinePublisher<T>(
+    params: WriterParams,
+  ): (data: T) => Promise<Chapter<EntityPayload<T>>> {
+    const add = this.createWriteTimeline<EntityPayload<T>>(
+      params,
+    ).createAddChapter()
 
     return this.createPublisher<T, Chapter<EntityPayload<T>>>(
-      async (data: T): Promise<Chapter> => {
+      async (data: T): Promise<Chapter<EntityPayload<T>>> => {
         const content = await this.core.validateEntity({
           type: params.entityType,
           data,
@@ -212,7 +220,7 @@ export class Sync {
     return payload.data
   }
 
-  public createFeedReader<T>(params: ReaderParams) {
+  public createFeedReader<T>(params: ReaderParams): () => Promise<T | null> {
     const { feed, encryptionKey } = getFeedReadParams(
       params.writer,
       params.name,
@@ -259,20 +267,24 @@ export class Sync {
       )
   }
 
-  public createReadTimeline<T = any>(params: ReaderParams) {
+  public createReadTimeline<T = any>(
+    params: ReaderParams,
+  ): Timeline<EntityPayload<T>> {
     const { feed, encryptionKey } = getFeedReadParams(
       params.writer,
       params.name,
       params.keyPair,
     )
 
-    const decode = async (res: BaseResponse<NodeJS.ReadableStream>) => {
+    const decode = async (
+      res: BaseResponse<NodeJS.ReadableStream>,
+    ): Promise<Chapter<EntityPayload<T>>> => {
       const body = await decodeStream(res.body, { key: encryptionKey })
       const chapter = validateChapter(fromBuffer(body))
       await this.core.validateEntity(chapter.content)
       return chapter
     }
 
-    return new Timeline<T>({ bzz: this.bzz, feed, decode })
+    return new Timeline<EntityPayload<T>>({ bzz: this.bzz, feed, decode })
   }
 }

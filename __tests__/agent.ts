@@ -1,6 +1,7 @@
 import { Readable } from 'stream'
 import { Bzz } from '@erebos/api-bzz-node'
 import { createKeyPair, sign } from '@erebos/secp256k1'
+// eslint-disable-next-line import/default
 import getStream from 'get-stream'
 import { BehaviorSubject } from 'rxjs'
 
@@ -38,7 +39,7 @@ import {
 describe('agent', () => {
   const bzz = new Bzz({
     url: 'http://localhost:8500',
-    signBytes: async (bytes, key) => sign(bytes, key),
+    signBytes: (bytes, key) => Promise.resolve(sign(bytes, key)),
   })
   const core = new Core()
   const sync = new Sync({ bzz, core })
@@ -424,7 +425,7 @@ describe('agent', () => {
         await outFS.push()
 
         bob.data$.subscribe({
-          next: async data => {
+          next: async () => {
             const fs = bob.inboundFileSystem
             if (fs != null) {
               const sub = fs.files.subscribe({
@@ -587,7 +588,7 @@ describe('agent', () => {
       await expect(clone.downloadText('/same.txt')).resolves.toBe('hello')
     })
 
-    test('FileSystemWriter and FileSystemReader flow', async () => {
+    test('FileSystemWriter and FileSystemReader manual flow', async () => {
       const aliceKeyPair = createKeyPair()
       const bobKeyPair = createKeyPair()
 
@@ -629,6 +630,44 @@ describe('agent', () => {
 
       const data = await reader.downloadJSON(otherPath)
       expect(data).toEqual(otherData)
+    })
+
+    test('FileSystemWriter and FileSystemReader auto flow', async done => {
+      const aliceKeyPair = createKeyPair()
+      const bobKeyPair = createKeyPair()
+
+      const writer = new FileSystemWriter({
+        sync,
+        keyPair: aliceKeyPair,
+        reader: bobKeyPair.getPublic('hex'),
+        files: {},
+        interval: 1000,
+        autoStart: true,
+      })
+      const reader = new FileSystemReader({
+        sync,
+        keyPair: bobKeyPair,
+        writer: aliceKeyPair.getPublic('hex'),
+        interval: 1000,
+        autoStart: true,
+      })
+
+      const filePath = '/hello.txt'
+      const fileText = 'Hello there!'
+
+      reader.files.subscribe({
+        next: async () => {
+          if (reader.hasFile(filePath)) {
+            const text = await reader.downloadText(filePath)
+            expect(text).toBe(fileText)
+            reader.stop()
+            writer.stop()
+            done()
+          }
+        },
+      })
+
+      await writer.uploadFile(filePath, fileText, { encrypt: true })
     })
   })
 
@@ -760,14 +799,14 @@ describe('agent', () => {
         },
       })
 
-      inboxes.newMessage$.subscribe(async inboxMessage => {
+      inboxes.newMessage$.subscribe(inboxMessage => {
         if (inboxMessage.inbox === 'last') {
           inboxes.stopAll()
           done()
         } else {
           const newKeyPair = outboxes.addOutbox('test')
           inboxes.addInbox('last', { writer: newKeyPair.getPublic('hex') })
-          await outboxes.sendMessage('test', { body: 'world' })
+          outboxes.sendMessage('test', { body: 'world' })
         }
       })
 

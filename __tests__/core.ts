@@ -71,13 +71,13 @@ describe('core', () => {
       const key = await createKey()
       const data = Buffer.from('hello')
       const payload = await encrypt(CRYPTO_ALGORITHM, key, data)
-      const decrypted = await decrypt(key, payload)
+      const decrypted = decrypt(key, payload)
       expect(data.equals(decrypted)).toBe(true)
 
       const otherKey = await createKey()
-      await expect(decrypt(otherKey, payload)).rejects.toThrow(
-        'Unsupported state or unable to authenticate data',
-      )
+      expect(() => {
+        decrypt(otherKey, payload)
+      }).toThrow('Unsupported state or unable to authenticate data')
     })
 
     test('encrypts and decrypts JSON', async () => {
@@ -88,14 +88,14 @@ describe('core', () => {
       expect(decrypted).toEqual(data)
 
       const otherKey = await createKey()
-      await expect(decryptJSON(otherKey, payload)).rejects.toThrow(
-        'Unsupported state or unable to authenticate data',
-      )
+      expect(() => {
+        decryptJSON(otherKey, payload)
+      }).toThrow('Unsupported state or unable to authenticate data')
     })
   })
 
   describe('encoding', () => {
-    async function read(payload: Buffer, params?: any) {
+    async function read(payload: Buffer, params?: any): Promise<Buffer> {
       return await decodeStream(toReadable(payload), params)
     }
 

@@ -24,7 +24,7 @@ export interface MailboxReaderParams extends MailboxParams {
 export function createMailboxReader(
   params: MailboxReaderParams,
 ): Timeline<EntityPayload<MessageData>> {
-  return params.sync.createReadTimeline<EntityPayload<MessageData>>({
+  return params.sync.createReadTimeline<MessageData>({
     keyPair: params.keyPair,
     writer: params.writer,
     entityType: MESSAGE_NAME,
@@ -36,7 +36,9 @@ export interface MailboxWriterParams extends MailboxParams {
   reader: string
 }
 
-export function createMailboxWriter(params: MailboxWriterParams) {
+export function createMailboxWriter(
+  params: MailboxWriterParams,
+): (data: MessageData) => Promise<Chapter<EntityPayload<MessageData>>> {
   return params.sync.createTimelinePublisher<MessageData>({
     keyPair: params.keyPair,
     reader: params.reader,
@@ -237,7 +239,7 @@ export class InboxesAgent {
   public changeInboxes(mailboxes: MailboxesRecord): InboxesAgent {
     const labels: Array<string> = []
 
-    Object.entries(mailboxes).forEach(([label, key], index) => {
+    Object.entries(mailboxes).forEach(([label, key]) => {
       labels.push(label)
       const inbox = this.inboxes[label]
       if (inbox == null) {

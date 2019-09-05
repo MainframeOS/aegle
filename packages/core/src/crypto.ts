@@ -52,18 +52,12 @@ export function createDecipher(
   return decipher
 }
 
-export async function decrypt(
-  key: Buffer,
-  payload: EncryptedPayload,
-): Promise<Buffer> {
+export function decrypt(key: Buffer, payload: EncryptedPayload): Buffer {
   const decipher = createDecipher(key, payload.params)
   return Buffer.concat([decipher.update(payload.data), decipher.final()])
 }
 
-export async function decryptJSON<T>(
-  key: Buffer,
-  payload: EncryptedPayload,
-): Promise<T> {
+export function decryptJSON<T>(key: Buffer, payload: EncryptedPayload): T {
   const decipher = createDecipher(key, payload.params)
   let decrypted = decipher.update(payload.data, undefined, 'utf8')
   decrypted += decipher.final('utf8')
