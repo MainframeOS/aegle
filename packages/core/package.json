@@ -25,6 +25,6 @@
     "get-stream": "^5.1.0"
   },
   "devDependencies": {
-    "@types/node-fetch": "^2.5.0"
+    "@types/node-fetch": "^2.5.1"
   }
 }

@@ -85,10 +85,11 @@ export class InboxAgent {
     }
   }
 
-  public start(): InboxAgent {
+  public start(): void {
     if (this.subscription !== null) {
       this.subscription.unsubscribe()
     }
+
     this.subscription = createMailboxReader({
       sync: this.params.sync,
       keyPair: this.params.keyPair,
@@ -109,39 +110,38 @@ export class InboxAgent {
         },
       })
     this.state$.next(InboxState.STARTED)
-    return this
   }
 
-  public stop(): InboxAgent {
+  public stop(): void {
     if (this.subscription !== null) {
       this.subscription.unsubscribe()
       this.subscription = null
       this.state$.next(InboxState.STOPPED)
     }
-    return this
   }
 
   public isWriter(key: string): boolean {
     return this.params.writer === key
   }
 
-  public setWriter(key: string): InboxAgent {
+  public setWriter(key: string): void {
     if (this.params.writer !== key) {
       this.params.writer = key
       if (this.subscription !== null) {
         this.start()
       }
     }
-    return this
   }
 }
 
+// TODO: extend from SyncParams
 export interface InboxAgentData {
   writer: string
   interval?: number
   messages?: Array<MessageData>
 }
 
+// TODO: extend from SyncParams, these params can be set at individual inbox and/or for all inboxes
 export interface InboxesAgentParams extends MailboxAgentParams {
   autoStart?: boolean
   inboxes?: Record<string, InboxAgentData>
@@ -176,18 +176,16 @@ export class InboxesAgent {
     }
   }
 
-  public startAll(): InboxesAgent {
+  public startAll(): void {
     Object.values(this.inboxes).forEach(inbox => {
       inbox.start()
     })
-    return this
   }
 
-  public stopAll(): InboxesAgent {
+  public stopAll(): void {
     Object.values(this.inboxes).forEach(inbox => {
       inbox.stop()
     })
-    return this
   }
 
   public hasInbox(label: string): boolean {
@@ -198,21 +196,20 @@ export class InboxesAgent {
     return this.inboxes[label] || null
   }
 
-  public setInbox(label: string, inbox: InboxAgent): InboxesAgent {
+  public setInbox(label: string, inbox: InboxAgent): void {
     this.inboxes[label] = inbox
     this.inboxSubscriptions[label] = inbox.newMessage$.subscribe({
       next: message => {
         this.newMessage$.next({ inbox: label, message })
       },
     })
-    return this
   }
 
   public addInbox(
     label: string,
     data: InboxAgentData,
     start: boolean = this.autoStart,
-  ): InboxAgent {
+  ): void {
     const inbox = new InboxAgent({
       sync: this.sync,
       keyPair: this.keyPair,
@@ -222,10 +219,9 @@ export class InboxesAgent {
       start,
     })
     this.setInbox(label, inbox)
-    return inbox
   }
 
-  public removeInbox(label: string): InboxesAgent {
+  public removeInbox(label: string): void {
     delete this.inboxes[label]
 
     const sub = this.inboxSubscriptions[label]
@@ -233,17 +229,20 @@ export class InboxesAgent {
       sub.unsubscribe()
       delete this.inboxSubscriptions[label]
     }
-    return this
   }
 
-  public changeInboxes(mailboxes: MailboxesRecord): InboxesAgent {
+  public changeInboxes(mailboxes: MailboxesRecord): void {
     const labels: Array<string> = []
 
     Object.entries(mailboxes).forEach(([label, key]) => {
       labels.push(label)
       const inbox = this.inboxes[label]
       if (inbox == null) {
-        this.addInbox(label, { writer: key })
+        this.addInbox(
+          label,
+          { writer: key, interval: this.interval },
+          this.autoStart,
+        )
       } else if (!inbox.isWriter(key)) {
         inbox.setWriter(key)
       }
@@ -254,8 +253,6 @@ export class InboxesAgent {
         this.removeInbox(label)
       }
     })
-
-    return this
   }
 }
 
@@ -294,13 +291,12 @@ export class OutboxesAgent {
     return this.outboxes[label] || null
   }
 
-  public setOutbox(label: string, keyPair: KeyPair): OutboxesAgent {
+  public setOutbox(label: string, keyPair: KeyPair): void {
     this.outboxes[label] = createMailboxWriter({
       sync: this.sync,
       reader: this.reader,
       keyPair,
     })
-    return this
   }
 
   public addOutbox(label: string): KeyPair {
@@ -309,9 +305,8 @@ export class OutboxesAgent {
     return keyPair
   }
 
-  public removeOutbox(label: string): OutboxesAgent {
+  public removeOutbox(label: string): void {
     delete this.outboxes[label]
-    return this
   }
 
   public async sendMessage(

@@ -3,7 +3,8 @@ import { Bzz } from '@erebos/api-bzz-node'
 import { createKeyPair, sign } from '@erebos/secp256k1'
 // eslint-disable-next-line import/default
 import getStream from 'get-stream'
-import { BehaviorSubject } from 'rxjs'
+import { BehaviorSubject, combineLatest } from 'rxjs'
+import { filter, flatMap, map } from 'rxjs/operators'
 
 import { Core, FilesRecord } from '@aegle/core'
 import { Sync, getPublicAddress } from '@aegle/sync'
@@ -13,6 +14,7 @@ import {
   createActorWriter,
   writeActor,
   readActor,
+  ActorAgent,
   // contact
   createFirstContactSubscriber,
   writeFirstContact,
@@ -53,30 +55,36 @@ describe('agent', () => {
     })
   }
 
-  test('actor protocol', async done => {
-    const keyPair = createKeyPair()
-    const pubKey = keyPair.getPublic('hex')
-    const actorData = {
-      publicKey: pubKey,
-      profile: {
-        displayName: 'Alice',
-      },
-    }
+  describe('actor protocol', () => {
+    test('writes and subscribes to an actor feed', async done => {
+      const keyPair = createKeyPair()
+      const pubKey = keyPair.getPublic('hex')
+      const actorData = {
+        publicKey: pubKey,
+        profile: {
+          displayName: 'Alice',
+        },
+      }
 
-    const subscription = createActorSubscriber({
-      sync,
-      actor: pubKey,
-      interval: 1000,
-    }).subscribe({
-      next: loadedActor => {
-        expect(loadedActor).toEqual(actorData)
-        subscription.unsubscribe()
-        done()
-      },
+      const subscription = createActorSubscriber({
+        sync,
+        actor: pubKey,
+        interval: 1000,
+      }).subscribe({
+        next: loadedActor => {
+          expect(loadedActor).toEqual(actorData)
+          subscription.unsubscribe()
+          done()
+        },
+      })
+
+      const write = createActorWriter({ sync, keyPair })
+      await write(actorData)
     })
 
-    const write = createActorWriter({ sync, keyPair })
-    await write(actorData)
+    // check properties are initialised as expected in constructor
+    // check contact can be added
+    test.todo('ActorAgent')
   })
 
   describe('contact protocols', () => {
@@ -471,7 +479,7 @@ describe('agent', () => {
 
     test.todo('uploadFile() and downloadFile() with streams')
 
-    // This doesn't work - need more investigation
+    // This doesn't work as it needs the content length to be provided - will be fixed in Erebos v0.10
     test.skip('uploadFile() supports a stream as input', async () => {
       const file1 = await uploadFile(sync, toReadable('hello'), {
         encrypt: true,
@@ -814,236 +822,331 @@ describe('agent', () => {
     })
   })
 
-  test('end-to-end flow', async () => {
-    jest.setTimeout(30000)
+  describe('end-to-end flow', () => {
+    test('using individual function calls', async () => {
+      jest.setTimeout(30000)
 
-    // Create key pairs for Alice and Bob
-    const aliceKeyPair = createKeyPair()
-    const aliceAddress = getPublicAddress(aliceKeyPair)
-    const bobKeyPair = createKeyPair()
-    const bobAddress = getPublicAddress(bobKeyPair)
+      // Create key pairs for Alice and Bob
+      const aliceKeyPair = createKeyPair()
+      const aliceAddress = getPublicAddress(aliceKeyPair)
+      const bobKeyPair = createKeyPair()
+      const bobAddress = getPublicAddress(bobKeyPair)
 
-    // Alice and Bob publish their public actor data to advertise their public keys
-    await Promise.all([
-      writeActor(
-        { sync, keyPair: aliceKeyPair },
-        {
-          profile: { displayName: 'Alice' },
-          publicKey: aliceKeyPair.getPublic('hex'),
-        },
-      ),
-      writeActor(
-        { sync, keyPair: bobKeyPair },
-        {
-          profile: { displayName: 'Bob' },
-          publicKey: bobKeyPair.getPublic('hex'),
-        },
-      ),
-    ])
+      // Alice and Bob publish their public actor data to advertise their public keys
+      await Promise.all([
+        writeActor(
+          { sync, keyPair: aliceKeyPair },
+          {
+            profile: { displayName: 'Alice' },
+            publicKey: aliceKeyPair.getPublic('hex'),
+          },
+        ),
+        writeActor(
+          { sync, keyPair: bobKeyPair },
+          {
+            profile: { displayName: 'Bob' },
+            publicKey: bobKeyPair.getPublic('hex'),
+          },
+        ),
+      ])
 
-    // Actor data can be loaded using their address after it's been published
-    const [aliceActor, bobActor] = await Promise.all([
-      readActor({ sync, actor: aliceAddress }),
-      readActor({ sync, actor: bobAddress }),
-    ])
-    if (aliceActor == null) {
-      throw new Error('Alice actor not found')
-    }
-    if (bobActor == null) {
-      throw new Error('Bob actor not found')
-    }
+      // Actor data can be loaded using their address after it's been published
+      const [aliceActor, bobActor] = await Promise.all([
+        readActor({ sync, actor: aliceAddress }),
+        readActor({ sync, actor: bobAddress }),
+      ])
+      if (aliceActor == null) {
+        throw new Error('Alice actor not found')
+      }
+      if (bobActor == null) {
+        throw new Error('Bob actor not found')
+      }
 
-    // Based on these advertised public keys, they can publish an encrypted first contact payload
-    const aliceBobKeyPair = createKeyPair()
-    const bobAliceKeyPair = createKeyPair()
-    await Promise.all([
-      // Alice -> Bob
-      writeFirstContact(
-        { sync, keyPair: aliceKeyPair, actorKey: bobActor.publicKey },
-        {
-          contactPublicKey: aliceBobKeyPair.getPublic('hex'),
-          actorAddress: aliceAddress,
-        },
-      ),
-      // Bob -> Alice
-      writeFirstContact(
-        { sync, keyPair: bobKeyPair, actorKey: aliceActor.publicKey },
-        {
-          contactPublicKey: bobAliceKeyPair.getPublic('hex'),
-          actorAddress: bobAddress,
-        },
-      ),
-    ])
+      // Based on these advertised public keys, they can publish an encrypted first contact payload
+      const aliceBobKeyPair = createKeyPair()
+      const bobAliceKeyPair = createKeyPair()
+      await Promise.all([
+        // Alice -> Bob
+        writeFirstContact(
+          { sync, keyPair: aliceKeyPair, actorKey: bobActor.publicKey },
+          {
+            contactPublicKey: aliceBobKeyPair.getPublic('hex'),
+            actorAddress: aliceAddress,
+          },
+        ),
+        // Bob -> Alice
+        writeFirstContact(
+          { sync, keyPair: bobKeyPair, actorKey: aliceActor.publicKey },
+          {
+            contactPublicKey: bobAliceKeyPair.getPublic('hex'),
+            actorAddress: bobAddress,
+          },
+        ),
+      ])
 
-    // Both Alice and Bob can retrieve each other's contact public key, they will use for future exchanges
-    const [aliceBobFirstContact, bobAliceFirstContact] = await Promise.all([
-      readFirstContact({
+      // Both Alice and Bob can retrieve each other's contact public key, they will use for future exchanges
+      const [aliceBobFirstContact, bobAliceFirstContact] = await Promise.all([
+        readFirstContact({
+          sync,
+          keyPair: aliceKeyPair,
+          actorKey: bobActor.publicKey,
+        }),
+        readFirstContact({
+          sync,
+          keyPair: bobKeyPair,
+          actorKey: aliceActor.publicKey,
+        }),
+      ])
+      if (aliceBobFirstContact == null) {
+        throw new Error('Alice - Bob first contact not found')
+      }
+      if (bobAliceFirstContact == null) {
+        throw new Error('Bob - Alice first contact not found')
+      }
+
+      // Create a FileSystem where Alice shares files with Bob
+      const aliceFilesKeyPair = createKeyPair()
+      const aliceBobFS = new FileSystemWriter({
         sync,
-        keyPair: aliceKeyPair,
-        actorKey: bobActor.publicKey,
-      }),
-      readFirstContact({
+        keyPair: aliceFilesKeyPair,
+        reader: aliceBobFirstContact.contactPublicKey,
+      })
+
+      // Push a file to Alice's FS and share the FS public key with Bob in their contact channel
+      await aliceBobFS.uploadFile('/readme.txt', 'Hello!', { encrypt: true })
+      await Promise.all([
+        aliceBobFS.push(),
+        writeContact(
+          {
+            sync,
+            keyPair: aliceBobKeyPair,
+            contactKey: aliceBobFirstContact.contactPublicKey,
+          },
+          { fileSystemKey: aliceFilesKeyPair.getPublic('hex') },
+        ),
+      ])
+
+      // Bob can now read the contact information from Alice
+      const bobAliceContact = await readContact({
+        sync,
+        keyPair: bobAliceKeyPair,
+        contactKey: bobAliceFirstContact.contactPublicKey,
+      })
+      if (bobAliceContact == null || bobAliceContact.fileSystemKey == null) {
+        throw new Error('Bob - Alice FS not found')
+      }
+
+      // Bob can read from Alice's FileSystem and check the file
+      const bobAliceFS = new FileSystemReader({
+        sync,
+        keyPair: bobAliceKeyPair,
+        writer: bobAliceContact.fileSystemKey,
+      })
+      await bobAliceFS.pull()
+      const fileFromAlice = bobAliceFS.getFile('/readme.txt')
+      expect(fileFromAlice).toBeDefined()
+
+      // Now let's add a third user, Chloe, who is going to interact with Bob
+      const chloeKeyPair = createKeyPair()
+      const chloeAddress = getPublicAddress(chloeKeyPair)
+      const chloeBobKeyPair = createKeyPair()
+
+      // Publish Chloe's actor and first contact payloads using Bob's public key
+      await Promise.all([
+        writeActor(
+          { sync, keyPair: chloeKeyPair },
+          {
+            profile: { displayName: 'Chloe' },
+            publicKey: chloeKeyPair.getPublic('hex'),
+          },
+        ),
+        writeFirstContact(
+          { sync, keyPair: chloeKeyPair, actorKey: bobActor.publicKey },
+          {
+            contactPublicKey: chloeBobKeyPair.getPublic('hex'),
+            actorAddress: chloeAddress,
+          },
+        ),
+      ])
+
+      // Bob can now access Chloe's actor and first contact data
+      const chloeActor = await readActor({ sync, actor: chloeAddress })
+      if (chloeActor == null) {
+        throw new Error('Chloe actor not found')
+      }
+
+      const bobChloeFirstContact = await readFirstContact({
         sync,
         keyPair: bobKeyPair,
-        actorKey: aliceActor.publicKey,
+        actorKey: chloeActor.publicKey,
+      })
+      if (bobChloeFirstContact == null) {
+        throw new Error('Bob - Chloe first contact not found')
+      }
+
+      // Create Bob -> Chloe mailbox and contact
+      const bobChloeKeyPair = createKeyPair()
+      const bobMailboxKeyPair = createKeyPair()
+      const publishMessage = createMailboxWriter({
+        sync,
+        keyPair: bobMailboxKeyPair,
+        reader: bobChloeFirstContact.contactPublicKey,
+      })
+
+      await Promise.all([
+        publishMessage({
+          title: 'Hello',
+          body: 'See attachment',
+          // Bob is attaching the metadata of the file Alice shared with him
+          attachments: [{ name: 'readme.txt', file: fileFromAlice }],
+        }),
+        writeContact(
+          {
+            sync,
+            keyPair: bobChloeKeyPair,
+            contactKey: bobChloeFirstContact.contactPublicKey,
+          },
+          { mailboxes: { outbox: bobMailboxKeyPair.getPublic('hex') } },
+        ),
+        writeFirstContact(
+          { sync, keyPair: bobKeyPair, actorKey: chloeActor.publicKey },
+          {
+            contactPublicKey: bobChloeKeyPair.getPublic('hex'),
+            actorAddress: bobAddress,
+          },
+        ),
+      ])
+
+      // Chloe reads Bob's first contact and contact payloads
+      const chloeBobFirstContact = await readFirstContact({
+        sync,
+        keyPair: chloeKeyPair,
+        actorKey: bobActor.publicKey,
+      })
+      if (chloeBobFirstContact == null) {
+        throw new Error('Chloe - Bob first contact not found')
+      }
+
+      const chloeBobContact = await readContact({
+        sync,
+        keyPair: chloeBobKeyPair,
+        contactKey: chloeBobFirstContact.contactPublicKey,
+      })
+      if (chloeBobContact == null || chloeBobContact.mailboxes == null) {
+        throw new Error('Chloe - Bob mailboxes not found')
+      }
+
+      // Chloe reads from the mailbox Bob has created and loads the message sent
+      const reader = createMailboxReader({
+        sync,
+        keyPair: chloeBobKeyPair,
+        writer: chloeBobContact.mailboxes.outbox,
+      })
+      const chapter = await reader.getLatestChapter()
+      if (chapter == null) {
+        throw new Error('Message from Bob not found')
+      }
+
+      const attachment = chapter.content.data.attachments[0]
+      expect(attachment).toBeDefined()
+
+      // Chloe downloads the file originally shared by Alice
+      const fileStream = await downloadFile(sync, attachment.file)
+      const text = await getStream(fileStream)
+      expect(text).toBe('Hello!')
+    })
+  })
+
+  test('using agent classes', async done => {
+    jest.setTimeout(30000)
+
+    const createActorAgent = (displayName: string): ActorAgent => {
+      return new ActorAgent({
+        autoStart: true,
+        interval: 1000,
+        data: {
+          actor: {
+            keyPair: createKeyPair(),
+            profile: { displayName },
+          },
+        },
+        sync,
+      })
+    }
+
+    const alice = createActorAgent('Alice')
+    const bob = createActorAgent('Bob')
+    const chloe = createActorAgent('Chloe')
+
+    // Alice, Bob and Chloe need to publish their actor data
+    await Promise.all([
+      alice.publishActor(),
+      bob.publishActor(),
+      chloe.publishActor(),
+    ])
+    // Alice, Bob need to get one another's address using a side-channel
+    const [aliceToBob, bobToAlice, bobToChloe, chloeToBob] = await Promise.all([
+      alice.addContact(bob.address),
+      bob.addContact(alice.address),
+      bob.addContact(chloe.address),
+      chloe.addContact(bob.address),
+    ])
+
+    const aliceFileSent$ = aliceToBob.connected$.pipe(
+      filter(Boolean),
+      flatMap(async () => {
+        await aliceToBob.createOutboundFileSystem()
+        await aliceToBob.outboundFileSystem.uploadFile('/test', 'hello!')
+        await aliceToBob.outboundFileSystem.push()
       }),
-    ])
-    if (aliceBobFirstContact == null) {
-      throw new Error('Alice - Bob first contact not found')
-    }
-    if (bobAliceFirstContact == null) {
-      throw new Error('Bob - Alice first contact not found')
-    }
+    )
 
-    // Create a FileSystem where Alice shares files with Bob
-    const aliceFilesKeyPair = createKeyPair()
-    const aliceBobFS = new FileSystemWriter({
-      sync,
-      keyPair: aliceFilesKeyPair,
-      reader: aliceBobFirstContact.contactPublicKey,
-    })
+    const aliceFileReceived$ = bobToAlice.data$.pipe(
+      map(() => bobToAlice.inboundFileSystem),
+      filter(Boolean),
+      flatMap(fs => fs.files),
+      map(() => bobToAlice.inboundFileSystem.getFile('/test')),
+      filter(Boolean),
+    )
 
-    // Push a file to Alice's FS and share the FS public key with Bob in their contact channel
-    await aliceBobFS.uploadFile('/readme.txt', 'Hello!', { encrypt: true })
-    await Promise.all([
-      aliceBobFS.push(),
-      writeContact(
-        {
-          sync,
-          keyPair: aliceBobKeyPair,
-          contactKey: aliceBobFirstContact.contactPublicKey,
-        },
-        { fileSystemKey: aliceFilesKeyPair.getPublic('hex') },
-      ),
-    ])
-
-    // Bob can now read the contact information from Alice
-    const bobAliceContact = await readContact({
-      sync,
-      keyPair: bobAliceKeyPair,
-      contactKey: bobAliceFirstContact.contactPublicKey,
-    })
-    if (bobAliceContact == null || bobAliceContact.fileSystemKey == null) {
-      throw new Error('Bob - Alice FS not found')
-    }
-
-    // Bob can read from Alice's FileSystem and check the file
-    const bobAliceFS = new FileSystemReader({
-      sync,
-      keyPair: bobAliceKeyPair,
-      writer: bobAliceContact.fileSystemKey,
-    })
-    await bobAliceFS.pull()
-    const fileFromAlice = bobAliceFS.getFile('/readme.txt')
-    expect(fileFromAlice).toBeDefined()
-
-    // Now let's add a third user, Chloe, who is going to interact with Bob
-    const chloeKeyPair = createKeyPair()
-    const chloeAddress = getPublicAddress(chloeKeyPair)
-    const chloeBobKeyPair = createKeyPair()
-
-    // Publish Chloe's actor and first contact payloads using Bob's public key
-    await Promise.all([
-      writeActor(
-        { sync, keyPair: chloeKeyPair },
-        {
-          profile: { displayName: 'Chloe' },
-          publicKey: chloeKeyPair.getPublic('hex'),
-        },
-      ),
-      writeFirstContact(
-        { sync, keyPair: chloeKeyPair, actorKey: bobActor.publicKey },
-        {
-          contactPublicKey: chloeBobKeyPair.getPublic('hex'),
-          actorAddress: chloeAddress,
-        },
-      ),
-    ])
-
-    // Bob can now access Chloe's actor and first contact data
-    const chloeActor = await readActor({ sync, actor: chloeAddress })
-    if (chloeActor == null) {
-      throw new Error('Chloe actor not found')
-    }
-
-    const bobChloeFirstContact = await readFirstContact({
-      sync,
-      keyPair: bobKeyPair,
-      actorKey: chloeActor.publicKey,
-    })
-    if (bobChloeFirstContact == null) {
-      throw new Error('Bob - Chloe first contact not found')
-    }
-
-    // Create Bob -> Chloe mailbox and contact
-    const bobChloeKeyPair = createKeyPair()
-    const bobMailboxKeyPair = createKeyPair()
-    const publishMessage = createMailboxWriter({
-      sync,
-      keyPair: bobMailboxKeyPair,
-      reader: bobChloeFirstContact.contactPublicKey,
-    })
-
-    await Promise.all([
-      publishMessage({
-        title: 'Hello',
-        body: 'See attachment',
-        // Bob is attaching the metadata of the file Alice shared with him
-        attachments: [{ name: 'readme.txt', file: fileFromAlice }],
+    const bobOutboxCreated$ = bobToChloe.connected$.pipe(
+      filter(Boolean),
+      flatMap(async () => {
+        await bobToChloe.addOutbox('hello')
       }),
-      writeContact(
-        {
-          sync,
-          keyPair: bobChloeKeyPair,
-          contactKey: bobChloeFirstContact.contactPublicKey,
-        },
-        { mailboxes: { outbox: bobMailboxKeyPair.getPublic('hex') } },
-      ),
-      writeFirstContact(
-        { sync, keyPair: bobKeyPair, actorKey: chloeActor.publicKey },
-        {
-          contactPublicKey: bobChloeKeyPair.getPublic('hex'),
-          actorAddress: bobAddress,
-        },
-      ),
-    ])
+    )
 
-    // Chloe reads Bob's first contact and contact payloads
-    const chloeBobFirstContact = await readFirstContact({
-      sync,
-      keyPair: chloeKeyPair,
-      actorKey: bobActor.publicKey,
+    const bobMessageSent$ = combineLatest(
+      aliceFileReceived$,
+      bobOutboxCreated$,
+    ).pipe(
+      flatMap(async ([file]) => {
+        await bobToChloe.outboxes.sendMessage('hello', {
+          title: 'hello',
+          body: 'check this file!',
+          attachments: [{ file, name: 'hello' }],
+        })
+      }),
+    )
+
+    const chloeMessageReceived$ = chloeToBob.data$.pipe(
+      map(() => chloeToBob.inboxes.getInbox('hello')),
+      filter(Boolean),
+      flatMap(inbox => inbox.newMessage$),
+      filter(msg => msg.title === 'hello'),
+    )
+
+    combineLatest(
+      aliceFileSent$,
+      bobMessageSent$,
+      chloeMessageReceived$,
+    ).subscribe({
+      next: () => {
+        alice.stopAll()
+        bob.stopAll()
+        chloe.stopAll()
+        done()
+      },
     })
-    if (chloeBobFirstContact == null) {
-      throw new Error('Chloe - Bob first contact not found')
-    }
-
-    const chloeBobContact = await readContact({
-      sync,
-      keyPair: chloeBobKeyPair,
-      contactKey: chloeBobFirstContact.contactPublicKey,
-    })
-    if (chloeBobContact == null || chloeBobContact.mailboxes == null) {
-      throw new Error('Chloe - Bob mailboxes not found')
-    }
-
-    // Chloe reads from the mailbox Bob has created and loads the message sent
-    const reader = createMailboxReader({
-      sync,
-      keyPair: chloeBobKeyPair,
-      writer: chloeBobContact.mailboxes.outbox,
-    })
-    const chapter = await reader.getLatestChapter()
-    if (chapter == null) {
-      throw new Error('Message from Bob not found')
-    }
-
-    const attachment = chapter.content.data.attachments[0]
-    expect(attachment).toBeDefined()
-
-    // Chloe downloads the file originally shared by Alice
-    const fileStream = await downloadFile(sync, attachment.file)
-    const text = await getStream(fileStream)
-    expect(text).toBe('Hello!')
   })
 })

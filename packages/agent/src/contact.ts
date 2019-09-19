@@ -14,6 +14,7 @@ import { map } from 'rxjs/operators'
 
 import { FileSystemReader, FileSystemWriter } from './fileSystem'
 import { InboxesAgent, InboxAgentData, OutboxesAgent } from './messaging'
+import { SyncParams } from './types'
 
 const CONTACT_FEED_PARAMS = { entityType: CONTACT_NAME, name: CONTACT_NAME }
 
@@ -149,11 +150,9 @@ export interface ContactAgentError {
   error: Error
 }
 
-export interface ContactAgentParams {
+export interface ContactAgentParams extends SyncParams {
   sync: Sync
   data: ContactAgentData
-  interval?: number
-  autoStart?: boolean
 }
 
 export class ContactAgent {
@@ -371,6 +370,7 @@ export class ContactAgent {
           writer: read.contactData.fileSystemKey,
           keyPair: write.keyPair,
           autoStart: this.autoStart,
+          interval: this.interval,
         })
       : null
   }

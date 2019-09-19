@@ -16,11 +16,15 @@ import { FeedWriteParams, Sync, getFeedWriteParams } from '@aegle/sync'
 import { KeyPair } from '@erebos/secp256k1'
 // eslint-disable-next-line import/default
 import getStream from 'get-stream'
+import isEqual from 'fast-deep-equal'
 import PQueue from 'p-queue'
 import { BehaviorSubject, Subscription, interval } from 'rxjs'
 import { flatMap } from 'rxjs/operators'
 
+import { SyncParams } from './types'
+
 const PATH_RE = new RegExp('^(/[^/]+)+$', 'i')
+
 const POLL_INTERVAL = 120 * 1000 // 2 mins
 export interface FileUploadParams extends FileMetadata {
   encrypt?: boolean
@@ -55,11 +59,19 @@ export async function uploadFile(
   let hash, encryption, size
 
   if (data instanceof Readable) {
+    if (params.size == null) {
+      throw new Error(
+        'The `size` parameter must be provided when calling `uploadFile()` with a Stream',
+      )
+    } else {
+      size = params.size
+    }
+    // The `size` option for `uploadFileStream()` is added in Erebos v0.10
     if (key === null) {
-      hash = await sync.bzz.uploadFileStream(data)
+      hash = await sync.bzz.uploadFileStream(data, { size })
     } else {
       const { cipher, iv } = await createCipher(CRYPTO_ALGORITHM, key)
-      hash = await sync.bzz.uploadFileStream(data.pipe(cipher))
+      hash = await sync.bzz.uploadFileStream(data.pipe(cipher), { size })
       encryption = {
         algorithm: CRYPTO_ALGORITHM,
         authTag: cipher.getAuthTag().toString('base64'),
@@ -149,11 +161,9 @@ enum FileSystemPushSyncState {
   FAILED,
 }
 
-export interface FileSystemReaderParams extends FileSystemParams {
+export interface FileSystemReaderParams extends FileSystemParams, SyncParams {
   writer: string
   keyPair?: KeyPair
-  interval?: number
-  autoStart?: boolean
 }
 
 export class FileSystemReader extends FileSystem {
@@ -210,7 +220,7 @@ export class FileSystemReader extends FileSystem {
       try {
         this.error = undefined
         const fs = await this.read()
-        if (fs != null) {
+        if (fs != null && !isEqual(fs.files, this.files.value)) {
           this.files.next(fs.files)
         }
         this.pullSync.next(FileSystemPullSyncState.DONE)
@@ -227,12 +237,10 @@ export interface FileSystemChanges {
   timestamp: number
 }
 
-export interface FileSystemWriterParams extends FileSystemParams {
+export interface FileSystemWriterParams extends FileSystemParams, SyncParams {
   keyPair: KeyPair
   files?: FilesRecord
   reader?: string
-  interval?: number
-  autoStart?: boolean
 }
 
 export class FileSystemWriter extends FileSystem {
