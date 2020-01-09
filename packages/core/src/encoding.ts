@@ -44,9 +44,9 @@ export async function decodeStream(
 
       try {
         // Decode headers
-        const headerSize = decodeHeaderSize(stream.read(
-          HEADER_SIZE_BYTES,
-        ) as Buffer)
+        const headerSize = decodeHeaderSize(
+          stream.read(HEADER_SIZE_BYTES) as Buffer,
+        )
         const headers: PayloadHeaders =
           headerSize === 0 ? {} : fromBuffer(stream.read(headerSize) as Buffer)
 

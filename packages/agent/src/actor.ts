@@ -1,6 +1,5 @@
 import { ACTOR_NAME, ActorData, ProfileData } from '@aegle/core'
 import { Sync, getPublicAddress } from '@aegle/sync'
-import { hexValue } from '@erebos/hex'
 import { KeyPair, createKeyPair } from '@erebos/secp256k1'
 import { Observable } from 'rxjs'
 import { map } from 'rxjs/operators'
@@ -47,7 +46,7 @@ export interface ActorWriterParams {
 export async function writeActor(
   params: ActorWriterParams,
   data: ActorData,
-): Promise<hexValue> {
+): Promise<string> {
   return await params.sync.writeFeed(
     { ...FEED_PARAMS, keyPair: params.keyPair },
     data,
@@ -56,7 +55,7 @@ export async function writeActor(
 
 export function createActorWriter(
   params: ActorWriterParams,
-): (data: ActorData) => Promise<hexValue> {
+): (data: ActorData) => Promise<string> {
   return params.sync.createFeedPublisher<ActorData>({
     ...FEED_PARAMS,
     keyPair: params.keyPair,
@@ -75,8 +74,8 @@ export interface ActorAgentData {
 }
 
 export interface ActorAgentParams extends SyncParams {
-  data: ActorAgentData
   sync: Sync
+  data: ActorAgentData
 }
 
 export class ActorAgent {
@@ -84,11 +83,11 @@ export class ActorAgent {
   protected data: ActorAgentData
   protected interval: number
 
-  public address: string
-  public contacts: Record<string, ContactAgent> = {}
-  public fileSystem: FileSystemWriter
-  public sync: Sync
-  public writeActor: (data: ActorData) => Promise<hexValue>
+  public readonly address: string
+  public readonly contacts: Record<string, ContactAgent> = {}
+  public readonly fileSystem: FileSystemWriter
+  public readonly sync: Sync
+  public readonly writeActor: (data: ActorData) => Promise<string>
 
   public constructor(params: ActorAgentParams) {
     this.autoStart = params.autoStart || false
@@ -122,6 +121,8 @@ export class ActorAgent {
       sync: this.sync,
       reader: this.data.actor.keyPair.getPublic('hex'),
     })
+
+    // TODO: call startAll() here if autoStart is true?
   }
 
   public startAll(): void {
@@ -139,7 +140,7 @@ export class ActorAgent {
   }
 
   public async publishActor(): Promise<void> {
-    return await this.writeActor({
+    await this.writeActor({
       profile: this.data.actor.profile,
       publicKey: this.data.actor.keyPair.getPublic('hex'),
     })
@@ -200,6 +201,10 @@ export class ActorAgent {
   }
 
   public removeContact(address: string): void {
-    delete this.contacts[address]
+    const contact = this.contacts[address]
+    if (contact != null) {
+      contact.stopAll()
+      delete this.contacts[address]
+    }
   }
 }

@@ -226,7 +226,7 @@ describe('sync', () => {
         reader: bobPubKey,
         name,
       })
-      const reader = sync.createReadTimeline({
+      const reader = sync.createTimelineReader({
         entityType: ACTOR_NAME,
         keyPair: bobKP,
         writer: alicePubKey,

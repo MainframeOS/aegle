@@ -66,12 +66,11 @@ export async function uploadFile(
     } else {
       size = params.size
     }
-    // The `size` option for `uploadFileStream()` is added in Erebos v0.10
     if (key === null) {
-      hash = await sync.bzz.uploadFileStream(data, { size })
+      hash = await sync.bzz.uploadFile(data, { size })
     } else {
       const { cipher, iv } = await createCipher(CRYPTO_ALGORITHM, key)
-      hash = await sync.bzz.uploadFileStream(data.pipe(cipher), { size })
+      hash = await sync.bzz.uploadFile(data.pipe(cipher), { size })
       encryption = {
         algorithm: CRYPTO_ALGORITHM,
         authTag: cipher.getAuthTag().toString('base64'),
@@ -114,23 +113,24 @@ export interface FileSystemParams {
 
 export class FileSystem {
   protected sync: Sync
-  public files: BehaviorSubject<FilesRecord>
+
+  public readonly files$: BehaviorSubject<FilesRecord>
 
   public constructor(params: FileSystemParams) {
     this.sync = params.sync
-    this.files = new BehaviorSubject(params.files || {})
+    this.files$ = new BehaviorSubject(params.files || {})
   }
 
   public hasFile(path: string): boolean {
-    return this.files.value[path] != null
+    return this.files$.value[path] != null
   }
 
   public getFile(path: string): FileData | null {
-    return this.files.value[path] || null
+    return this.files$.value[path] || null
   }
 
   public async downloadFile(path: string): Promise<NodeJS.ReadableStream> {
-    const file = this.files.value[path]
+    const file = this.files$.value[path]
     if (file == null) {
       throw new Error('File not found')
     }
@@ -148,14 +148,14 @@ export class FileSystem {
   }
 }
 
-enum FileSystemPullSyncState {
+export enum FileSystemPullSyncState {
   PENDING,
   PULLING,
   FAILED,
   DONE,
 }
 
-enum FileSystemPushSyncState {
+export enum FileSystemPushSyncState {
   IDLE,
   PUSHING,
   FAILED,
@@ -173,8 +173,9 @@ export class FileSystemReader extends FileSystem {
   private writer: string
   private read: () => Promise<FileSystemData | null>
 
+  public readonly pullSync$: BehaviorSubject<FileSystemPullSyncState>
+
   public error: Error | undefined
-  public pullSync: BehaviorSubject<FileSystemPullSyncState>
 
   public constructor(params: FileSystemReaderParams) {
     super(params)
@@ -183,7 +184,7 @@ export class FileSystemReader extends FileSystem {
     this.keyPair = params.keyPair
     this.writer = params.writer
 
-    this.pullSync = new BehaviorSubject(
+    this.pullSync$ = new BehaviorSubject(
       FileSystemPullSyncState.PENDING as FileSystemPullSyncState,
     )
     this.read = this.sync.createFeedReader<FileSystemData>({
@@ -215,18 +216,18 @@ export class FileSystemReader extends FileSystem {
   }
 
   public async pull(): Promise<void> {
-    if (this.pullSync.value !== FileSystemPullSyncState.PULLING) {
-      this.pullSync.next(FileSystemPullSyncState.PULLING)
+    if (this.pullSync$.value !== FileSystemPullSyncState.PULLING) {
+      this.pullSync$.next(FileSystemPullSyncState.PULLING)
       try {
         this.error = undefined
         const fs = await this.read()
-        if (fs != null && !isEqual(fs.files, this.files.value)) {
-          this.files.next(fs.files)
+        if (fs != null && !isEqual(fs.files, this.files$.value)) {
+          this.files$.next(fs.files)
         }
-        this.pullSync.next(FileSystemPullSyncState.DONE)
+        this.pullSync$.next(FileSystemPullSyncState.DONE)
       } catch (err) {
         this.error = err
-        this.pullSync.next(FileSystemPullSyncState.FAILED)
+        this.pullSync$.next(FileSystemPullSyncState.FAILED)
       }
     }
   }
@@ -249,10 +250,11 @@ export class FileSystemWriter extends FileSystem {
   private publishQueue: PQueue
   private subscription: Subscription | undefined
 
-  public changes: BehaviorSubject<FileSystemChanges>
+  public readonly changes$: BehaviorSubject<FileSystemChanges>
+  public readonly pullSync$: BehaviorSubject<FileSystemPullSyncState>
+  public readonly pushSync$: BehaviorSubject<FileSystemPushSyncState>
+
   public error: Error | undefined
-  public pullSync: BehaviorSubject<FileSystemPullSyncState>
-  public pushSync: BehaviorSubject<FileSystemPushSyncState>
 
   public constructor(params: FileSystemWriterParams) {
     super(params)
@@ -266,14 +268,14 @@ export class FileSystemWriter extends FileSystem {
     this.publishQueue = new PQueue({ concurrency: 1 })
 
     const hasFiles = params.files != null
-    this.changes = new BehaviorSubject({
+    this.changes$ = new BehaviorSubject({
       sync: true,
       timestamp: 0,
     } as FileSystemChanges)
-    this.pullSync = new BehaviorSubject(
+    this.pullSync$ = new BehaviorSubject(
       hasFiles ? FileSystemPullSyncState.DONE : FileSystemPullSyncState.PENDING,
     ) as BehaviorSubject<FileSystemPullSyncState>
-    this.pushSync = new BehaviorSubject(
+    this.pushSync$ = new BehaviorSubject(
       FileSystemPushSyncState.IDLE as FileSystemPushSyncState,
     )
 
@@ -283,16 +285,16 @@ export class FileSystemWriter extends FileSystem {
   }
 
   protected setLocalFiles(files: FilesRecord): void {
-    this.files.next(files)
-    this.changes.next({ sync: false, timestamp: Date.now() })
+    this.files$.next(files)
+    this.changes$.next({ sync: false, timestamp: Date.now() })
   }
 
   protected async publish(): Promise<void> {
-    this.pushSync.next(FileSystemPushSyncState.PUSHING)
+    this.pushSync$.next(FileSystemPushSyncState.PUSHING)
     try {
       this.error = undefined
       const payload = await encodePayload(
-        { type: FILE_SYSTEM_NAME, data: { files: this.files.value } },
+        { type: FILE_SYSTEM_NAME, data: { files: this.files$.value } },
         { key: this.feedParams.encryptionKey },
       )
       await this.sync.bzz.setFeedContent(
@@ -301,15 +303,15 @@ export class FileSystemWriter extends FileSystem {
         undefined,
         this.feedParams.signParams,
       )
-      this.pushSync.next(FileSystemPushSyncState.IDLE)
+      this.pushSync$.next(FileSystemPushSyncState.IDLE)
     } catch (err) {
       this.error = err
-      this.pushSync.next(FileSystemPushSyncState.FAILED)
+      this.pushSync$.next(FileSystemPushSyncState.FAILED)
     }
   }
 
   public async initialize(): Promise<void> {
-    switch (this.pullSync.value) {
+    switch (this.pullSync$.value) {
       case FileSystemPullSyncState.DONE:
         return
       case FileSystemPullSyncState.PULLING:
@@ -323,11 +325,11 @@ export class FileSystemWriter extends FileSystem {
             const payload = await this.sync.core.decodeEntityStream<
               FileSystemData
             >(res.body, { key: this.feedParams.encryptionKey })
-            this.files.next(payload.data.files)
+            this.files$.next(payload.data.files)
           }
-          this.pullSync.next(FileSystemPullSyncState.DONE)
+          this.pullSync$.next(FileSystemPullSyncState.DONE)
         } catch (err) {
-          this.pullSync.next(FileSystemPullSyncState.FAILED)
+          this.pullSync$.next(FileSystemPullSyncState.FAILED)
         }
       }
     }
@@ -350,18 +352,18 @@ export class FileSystemWriter extends FileSystem {
   }
 
   public async push(): Promise<void> {
-    if (this.changes.value.sync) {
+    if (this.changes$.value.sync) {
       // Nothing new to push
       return
     }
 
     // Keep track of timestamp at the time changes are being pushed
-    const { timestamp } = this.changes.value
+    const { timestamp } = this.changes$.value
     await this.publishQueue.add(() => this.publish())
 
     // If no other change has happened, changes are in sync
-    if (this.changes.value.timestamp === timestamp) {
-      this.changes.next({ sync: true, timestamp })
+    if (this.changes$.value.timestamp === timestamp) {
+      this.changes$.next({ sync: true, timestamp })
     }
   }
 
@@ -369,14 +371,14 @@ export class FileSystemWriter extends FileSystem {
     if (!isValidPath(path)) {
       throw new Error('Invalid path')
     }
-    this.setLocalFiles({ ...this.files.value, [path]: file })
+    this.setLocalFiles({ ...this.files$.value, [path]: file })
   }
 
   public removeFile(path: string): boolean {
-    if (this.files.value[path] == null) {
+    if (this.files$.value[path] == null) {
       return false
     }
-    const { [path]: _removeFile, ...otherFiles } = this.files.value
+    const { [path]: _removeFile, ...otherFiles } = this.files$.value
     this.setLocalFiles(otherFiles)
     return true
   }
@@ -385,11 +387,11 @@ export class FileSystemWriter extends FileSystem {
     if (!isValidPath(toPath)) {
       throw new Error('Invalid path')
     }
-    const file = this.files.value[fromPath]
+    const file = this.files$.value[fromPath]
     if (file == null) {
       return false
     }
-    const { [fromPath]: _removeFile, ...otherFiles } = this.files.value
+    const { [fromPath]: _removeFile, ...otherFiles } = this.files$.value
     this.setLocalFiles({ ...otherFiles, [toPath]: file })
     return true
   }
@@ -403,7 +405,7 @@ export class FileSystemWriter extends FileSystem {
       throw new Error('Invalid path')
     }
     const file = await uploadFile(this.sync, data, params)
-    this.setLocalFiles({ ...this.files.value, [path]: file })
+    this.setLocalFiles({ ...this.files$.value, [path]: file })
     return file
   }
 }

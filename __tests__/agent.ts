@@ -82,9 +82,50 @@ describe('agent', () => {
       await write(actorData)
     })
 
-    // check properties are initialised as expected in constructor
-    // check contact can be added
-    test.todo('ActorAgent')
+    describe('ActorAgent', () => {
+      test('sets the actor address, contacts and file system', () => {
+        const agent = new ActorAgent({
+          sync,
+          data: {
+            actor: {
+              keyPair: createKeyPair(),
+            },
+            fileSystemKeyPair: createKeyPair(),
+          },
+        })
+        expect(agent.address).toBeDefined()
+        expect(agent.contacts).toBeDefined()
+        expect(agent.fileSystem).toBeInstanceOf(FileSystemWriter)
+      })
+
+      test('adds and removes contacts', async () => {
+        const alice = new ActorAgent({
+          sync,
+          data: {
+            actor: {
+              keyPair: createKeyPair(),
+            },
+          },
+        })
+
+        const bob = new ActorAgent({
+          sync,
+          data: {
+            actor: {
+              keyPair: createKeyPair(),
+            },
+          },
+        })
+
+        await bob.publishActor()
+
+        await alice.addContact(bob.address)
+        expect(alice.hasContact(bob.address)).toBe(true)
+
+        alice.removeContact(bob.address)
+        expect(alice.hasContact(bob.address)).toBe(false)
+      })
+    })
   })
 
   describe('contact protocols', () => {
@@ -436,7 +477,7 @@ describe('agent', () => {
           next: async () => {
             const fs = bob.inboundFileSystem
             if (fs != null) {
-              const sub = fs.files.subscribe({
+              const sub = fs.files$.subscribe({
                 next: () => {
                   if (fs.hasFile('/test')) {
                     sub.unsubscribe()
@@ -477,18 +518,16 @@ describe('agent', () => {
       expect(text).toBe('Hello test')
     })
 
-    test.todo('uploadFile() and downloadFile() with streams')
-
-    // This doesn't work as it needs the content length to be provided - will be fixed in Erebos v0.10
-    test.skip('uploadFile() supports a stream as input', async () => {
+    test('uploadFile() supports a stream as input', async () => {
       const file1 = await uploadFile(sync, toReadable('hello'), {
         encrypt: true,
+        size: 5,
       })
       const res1 = await downloadFile(sync, file1)
       const text1 = await getStream(res1)
       expect(text1).toBe('hello')
 
-      const file2 = await uploadFile(sync, toReadable('hello'))
+      const file2 = await uploadFile(sync, toReadable('hello'), { size: 5 })
       const res2 = await downloadFile(sync, file2)
       const text2 = await getStream(res2)
       expect(text2).toBe('hello')
@@ -511,8 +550,8 @@ describe('agent', () => {
 
       test('stores the files references in a BehaviorSubject', () => {
         const fs = new FileSystem({ sync, files })
-        expect(fs.files).toBeInstanceOf(BehaviorSubject)
-        expect(fs.files.value).toEqual(files)
+        expect(fs.files$).toBeInstanceOf(BehaviorSubject)
+        expect(fs.files$.value).toEqual(files)
       })
 
       test('hasFile() method', () => {
@@ -663,7 +702,7 @@ describe('agent', () => {
       const filePath = '/hello.txt'
       const fileText = 'Hello there!'
 
-      reader.files.subscribe({
+      reader.files$.subscribe({
         next: async () => {
           if (reader.hasFile(filePath)) {
             const text = await reader.downloadText(filePath)
@@ -756,7 +795,7 @@ describe('agent', () => {
           keyPair: bobKeyPair,
           writer: aliceMailboxPublicKey,
           interval: 1000,
-          start: true,
+          autoStart: true,
         })
         expect(inbox.state$.value).toBe(InboxState.STARTED)
 
@@ -1104,7 +1143,7 @@ describe('agent', () => {
     const aliceFileReceived$ = bobToAlice.data$.pipe(
       map(() => bobToAlice.inboundFileSystem),
       filter(Boolean),
-      flatMap(fs => fs.files),
+      flatMap(fs => fs.files$),
       map(() => bobToAlice.inboundFileSystem.getFile('/test')),
       filter(Boolean),
     )

@@ -20,11 +20,11 @@
     "prepublishOnly": "yarn build"
   },
   "dependencies": {
-    "@erebos/api-bzz-node": "^0.9.0",
+    "@erebos/api-bzz-node": "^0.12.0",
     "ajv": "^6.10.2",
     "get-stream": "^5.1.0"
   },
   "devDependencies": {
-    "@types/node-fetch": "^2.5.1"
+    "@types/node-fetch": "^2.5.4"
   }
 }

@@ -9,17 +9,18 @@ import {
   BaseResponse,
   Bzz,
   FeedParams,
-  PollContentOptions,
+  PollFeedContentOptions,
   UploadOptions,
   getFeedTopic,
 } from '@erebos/api-bzz-node'
-import { createHex, hexValue } from '@erebos/hex'
+import { Hex, hexValue } from '@erebos/hex'
 import { hash, pubKeyToAddress } from '@erebos/keccak256'
 import { KeyPair, createPublic } from '@erebos/secp256k1'
 import {
   Chapter,
   PartialChapter,
-  Timeline,
+  TimelineReader,
+  TimelineWriter,
   validateChapter,
 } from '@erebos/timeline'
 import PQueue from 'p-queue'
@@ -31,7 +32,7 @@ export function getPublicAddress(keyPair: KeyPair): string {
 }
 
 export function getSharedTopic(encryptionKey: Buffer, name?: string): hexValue {
-  return getFeedTopic({ name, topic: createHex(hash(encryptionKey)).value })
+  return getFeedTopic({ name, topic: Hex.from(hash(encryptionKey)).value })
 }
 
 export interface FeedReadParams {
@@ -112,7 +113,7 @@ export interface ReaderParams extends ChannelParams {
 }
 
 export interface SubscriberParams extends ReaderParams {
-  options: PollContentOptions
+  options: PollFeedContentOptions
 }
 
 export interface SyncConfig {
@@ -138,7 +139,7 @@ export class Sync {
     }
   }
 
-  public async writeFeed<T>(params: WriterParams, data: T): Promise<hexValue> {
+  public async writeFeed<T>(params: WriterParams, data: T): Promise<string> {
     const { feed, encryptionKey, signParams } = getFeedWriteParams(
       params.keyPair,
       params.name,
@@ -152,22 +153,22 @@ export class Sync {
 
   public createFeedPublisher<T>(
     params: WriterParams,
-  ): (entity: T) => Promise<hexValue> {
+  ): (entity: T) => Promise<string> {
     const { feed, encryptionKey, signParams } = getFeedWriteParams(
       params.keyPair,
       params.name,
       params.reader,
     )
-    const push = async (data: T): Promise<hexValue> => {
+    const push = async (data: T): Promise<string> => {
       const payload = await this.core.encodeEntity(params.entityType, data, {
         key: encryptionKey,
       })
       return await this.bzz.setFeedContent(feed, payload, undefined, signParams)
     }
-    return this.createPublisher<T, hexValue>(push)
+    return this.createPublisher<T, string>(push)
   }
 
-  public createWriteTimeline<T>(params: WriterParams): Timeline<T> {
+  public createTimelineWriter<T>(params: WriterParams): TimelineWriter<T> {
     const { feed, encryptionKey, signParams } = getFeedWriteParams(
       params.keyPair,
       params.name,
@@ -181,13 +182,13 @@ export class Sync {
       }
     }
 
-    return new Timeline<T>({ bzz: this.bzz, feed, encode, signParams })
+    return new TimelineWriter<T>({ bzz: this.bzz, feed, encode, signParams })
   }
 
   public createTimelinePublisher<T>(
     params: WriterParams,
   ): (data: T) => Promise<Chapter<EntityPayload<T>>> {
-    const add = this.createWriteTimeline<EntityPayload<T>>(
+    const add = this.createTimelineWriter<EntityPayload<T>>(
       params,
     ).createAddChapter()
 
@@ -257,7 +258,7 @@ export class Sync {
         mode: 'raw',
       })
       .pipe(
-        flatMap(async (res: any | null) => {
+        flatMap(async res => {
           return res
             ? await this.core.decodeEntityStream<T>(res.body, {
                 key: encryptionKey,
@@ -267,9 +268,9 @@ export class Sync {
       )
   }
 
-  public createReadTimeline<T = any>(
+  public createTimelineReader<T = any>(
     params: ReaderParams,
-  ): Timeline<EntityPayload<T>> {
+  ): TimelineReader<EntityPayload<T>> {
     const { feed, encryptionKey } = getFeedReadParams(
       params.writer,
       params.name,
@@ -285,6 +286,6 @@ export class Sync {
       return chapter
     }
 
-    return new Timeline<EntityPayload<T>>({ bzz: this.bzz, feed, decode })
+    return new TimelineReader<EntityPayload<T>>({ bzz: this.bzz, feed, decode })
   }
 }

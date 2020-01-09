@@ -7,12 +7,14 @@ import {
 } from '@aegle/core'
 import { Sync } from '@aegle/sync'
 import { KeyPair, createKeyPair } from '@erebos/secp256k1'
-import { Chapter, Timeline } from '@erebos/timeline'
+import { Chapter, TimelineReader } from '@erebos/timeline'
 import { BehaviorSubject, Subject, Subscription } from 'rxjs'
+
+import { SyncParams } from './types'
 
 const POLL_INTERVAL = 60 * 1000 // 1 min
 
-interface MailboxParams {
+export interface MailboxParams {
   sync: Sync
   keyPair: KeyPair
 }
@@ -23,8 +25,8 @@ export interface MailboxReaderParams extends MailboxParams {
 
 export function createMailboxReader(
   params: MailboxReaderParams,
-): Timeline<EntityPayload<MessageData>> {
-  return params.sync.createReadTimeline<MessageData>({
+): TimelineReader<EntityPayload<MessageData>> {
+  return params.sync.createTimelineReader<MessageData>({
     keyPair: params.keyPair,
     writer: params.writer,
     entityType: MESSAGE_NAME,
@@ -47,10 +49,9 @@ export function createMailboxWriter(
   })
 }
 
-interface MailboxAgentParams {
+export interface MailboxAgentParams extends SyncParams {
   sync: Sync
   keyPair: KeyPair
-  interval?: number
 }
 
 export enum InboxState {
@@ -59,20 +60,22 @@ export enum InboxState {
   ERROR,
 }
 
-export interface InboxAgentParams extends MailboxAgentParams {
+export interface InboxAgentData {
   writer: string
   messages?: Array<MessageData>
-  start?: boolean
 }
+
+export interface InboxAgentParams extends MailboxAgentParams, InboxAgentData {}
 
 export class InboxAgent {
   protected params: InboxAgentParams
   protected subscription: Subscription | null = null
 
+  public readonly newMessage$: Subject<MessageData>
+  public readonly state$: BehaviorSubject<InboxState>
+
   public error: Error | undefined
   public messages: Array<MessageData>
-  public newMessage$: Subject<MessageData>
-  public state$: BehaviorSubject<InboxState>
 
   public constructor(params: InboxAgentParams) {
     this.params = params
@@ -80,7 +83,7 @@ export class InboxAgent {
     this.newMessage$ = new Subject()
     this.state$ = new BehaviorSubject(InboxState.STOPPED as InboxState)
 
-    if (params.start) {
+    if (params.autoStart) {
       this.start()
     }
   }
@@ -124,27 +127,26 @@ export class InboxAgent {
     return this.params.writer === key
   }
 
-  public setWriter(key: string): void {
-    if (this.params.writer !== key) {
-      this.params.writer = key
-      if (this.subscription !== null) {
-        this.start()
-      }
+  public setWriter(key: string): boolean {
+    if (this.params.writer === key) {
+      return false
     }
+
+    this.params.writer = key
+    if (this.subscription !== null) {
+      this.start()
+    }
+    return true
   }
 }
 
-// TODO: extend from SyncParams
-export interface InboxAgentData {
+export interface InboxesAgentInboxParams extends SyncParams {
   writer: string
-  interval?: number
   messages?: Array<MessageData>
 }
 
-// TODO: extend from SyncParams, these params can be set at individual inbox and/or for all inboxes
 export interface InboxesAgentParams extends MailboxAgentParams {
-  autoStart?: boolean
-  inboxes?: Record<string, InboxAgentData>
+  inboxes?: Record<string, InboxesAgentInboxParams>
 }
 
 export interface InboxNewMessageData {
@@ -159,8 +161,8 @@ export class InboxesAgent {
   protected interval: number | undefined
   protected inboxSubscriptions: Record<string, Subscription> = {}
 
-  public inboxes: Record<string, InboxAgent> = {}
-  public newMessage$: Subject<InboxNewMessageData>
+  public readonly inboxes: Record<string, InboxAgent> = {}
+  public readonly newMessage$: Subject<InboxNewMessageData>
 
   public constructor(params: InboxesAgentParams) {
     this.autoStart = params.autoStart || false
@@ -205,18 +207,14 @@ export class InboxesAgent {
     })
   }
 
-  public addInbox(
-    label: string,
-    data: InboxAgentData,
-    start: boolean = this.autoStart,
-  ): void {
+  public addInbox(label: string, params: InboxesAgentInboxParams): void {
     const inbox = new InboxAgent({
       sync: this.sync,
       keyPair: this.keyPair,
-      interval: data.interval || this.interval,
-      writer: data.writer,
-      messages: data.messages,
-      start,
+      writer: params.writer,
+      messages: params.messages,
+      autoStart: params.autoStart == null ? this.autoStart : params.autoStart,
+      interval: params.interval || this.interval,
     })
     this.setInbox(label, inbox)
   }
@@ -238,11 +236,7 @@ export class InboxesAgent {
       labels.push(label)
       const inbox = this.inboxes[label]
       if (inbox == null) {
-        this.addInbox(
-          label,
-          { writer: key, interval: this.interval },
-          this.autoStart,
-        )
+        this.addInbox(label, { writer: key })
       } else if (!inbox.isWriter(key)) {
         inbox.setWriter(key)
       }
@@ -270,7 +264,7 @@ export class OutboxesAgent {
   protected sync: Sync
   protected reader: string
 
-  public outboxes: Record<string, SendMessage> = {}
+  public readonly outboxes: Record<string, SendMessage> = {}
 
   public constructor(params: OutboxesAgentParams) {
     this.sync = params.sync

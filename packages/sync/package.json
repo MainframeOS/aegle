@@ -21,15 +21,15 @@
   },
   "dependencies": {
     "@aegle/core": "^0.1.0",
-    "@erebos/api-bzz-node": "^0.9.0",
-    "@erebos/hex": "^0.9.0",
-    "@erebos/keccak256": "^0.9.0",
-    "@erebos/secp256k1": "^0.9.0",
-    "@erebos/timeline": "^0.9.0",
-    "p-queue": "^6.1.1",
-    "rxjs": "^6.5.3"
+    "@erebos/api-bzz-node": "^0.12.0",
+    "@erebos/hex": "^0.12.0",
+    "@erebos/keccak256": "^0.11.0",
+    "@erebos/secp256k1": "^0.10.0",
+    "@erebos/timeline": "^0.12.0",
+    "p-queue": "^6.2.1",
+    "rxjs": "^6.5.4"
   },
   "devDependencies": {
-    "@types/elliptic": "^6.4.9"
+    "@types/elliptic": "^6.4.10"
   }
 }

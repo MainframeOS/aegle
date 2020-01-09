@@ -7,7 +7,6 @@ import {
   ProfileData,
 } from '@aegle/core'
 import { Sync, getPublicAddress } from '@aegle/sync'
-import { hexValue } from '@erebos/hex'
 import { KeyPair, createKeyPair } from '@erebos/secp256k1'
 import { BehaviorSubject, Observable, Subject, Subscription } from 'rxjs'
 import { map } from 'rxjs/operators'
@@ -44,7 +43,7 @@ export async function readContact(
 export async function writeContact(
   params: ContactParams,
   data: ContactData,
-): Promise<hexValue> {
+): Promise<string> {
   return await params.sync.writeFeed<ContactData>(
     {
       ...CONTACT_FEED_PARAMS,
@@ -127,7 +126,7 @@ export interface FirstContactAgentData {
 export interface ReadContactAgentData {
   actorAddress: string
   actorData?: ActorData
-  contactPublicKey?: string // If knows, means first contact has been established
+  contactPublicKey?: string // If known, means first contact has been established
   contactData?: ContactData
   firstContact?: FirstContactAgentData
 }
@@ -165,10 +164,11 @@ export class ContactAgent {
   protected interval: number
   protected sync: Sync
 
-  public connected$: BehaviorSubject<boolean>
-  public data$: BehaviorSubject<ContactData | null>
-  public error$: Subject<ContactAgentError>
-  public inboxes: InboxesAgent
+  public readonly connected$: BehaviorSubject<boolean>
+  public readonly data$: BehaviorSubject<ContactData | null>
+  public readonly error$: Subject<ContactAgentError>
+  public readonly inboxes: InboxesAgent
+
   public outboxes: OutboxesAgent | null = null
   public outboundFileSystem: FileSystemWriter | null = null
 
@@ -241,13 +241,10 @@ export class ContactAgent {
           ? fileSystemKeyPair.getPublic('hex')
           : undefined,
         mailboxes: mailboxes
-          ? Object.entries(mailboxes).reduce(
-              (acc, [label, keyPair]) => {
-                acc[label] = keyPair.getPublic('hex')
-                return acc
-              },
-              {} as Record<string, string>,
-            )
+          ? Object.entries(mailboxes).reduce((acc, [label, keyPair]) => {
+              acc[label] = keyPair.getPublic('hex')
+              return acc
+            }, {} as Record<string, string>)
           : undefined,
         profile,
       },
