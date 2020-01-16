@@ -6,13 +6,12 @@ import {
   fromBuffer,
 } from '@aegle/core'
 import {
-  BaseResponse,
-  Bzz,
+  BzzFeed,
   FeedParams,
   PollFeedContentOptions,
-  UploadOptions,
   getFeedTopic,
-} from '@erebos/api-bzz-node'
+} from '@erebos/bzz-feed'
+import { Bzz, UploadOptions } from '@erebos/bzz-node'
 import { Hex, hexValue } from '@erebos/hex'
 import { hash, pubKeyToAddress } from '@erebos/keccak256'
 import { KeyPair, createPublic } from '@erebos/secp256k1'
@@ -23,6 +22,7 @@ import {
   TimelineWriter,
   validateChapter,
 } from '@erebos/timeline'
+import { Response } from 'node-fetch'
 import PQueue from 'p-queue'
 import { Observable } from 'rxjs'
 import { flatMap } from 'rxjs/operators'
@@ -57,7 +57,7 @@ export function getFeedReadParams(
         'writer argument must be a public key when keyPair is provided to derive the shared key',
       )
     }
-    encryptionKey = keyPair.derive(pubKey.getPublic()).toBuffer() as Buffer
+    encryptionKey = keyPair.derive(pubKey.getPublic()).toBuffer()
     feed.topic = getSharedTopic(encryptionKey, name)
   } else if (name != null) {
     feed.name = name
@@ -84,7 +84,7 @@ export function getFeedWriteParams(
   let encryptionKey: Buffer | undefined
   if (reader != null) {
     const pubKey = createPublic(reader)
-    encryptionKey = keyPair.derive(pubKey.getPublic()).toBuffer() as Buffer
+    encryptionKey = keyPair.derive(pubKey.getPublic()).toBuffer()
     feed.topic = getSharedTopic(encryptionKey, name)
   } else if (name != null) {
     feed.name = name
@@ -117,17 +117,21 @@ export interface SubscriberParams extends ReaderParams {
 }
 
 export interface SyncConfig {
-  bzz: Bzz
+  bzz: BzzFeed<NodeJS.ReadableStream, Response>
   core?: Core
 }
 
 export class Sync {
-  public bzz: Bzz
+  public bzzFeed: BzzFeed<NodeJS.ReadableStream, Response>
   public core: Core
 
   public constructor(config: SyncConfig) {
-    this.bzz = config.bzz
+    this.bzzFeed = config.bzz
     this.core = config.core || new Core()
+  }
+
+  public get bzz(): Bzz<NodeJS.ReadableStream, Response> {
+    return this.bzzFeed.bzz
   }
 
   public createPublisher<T, U>(
@@ -148,7 +152,7 @@ export class Sync {
     const payload = await this.core.encodeEntity(params.entityType, data, {
       key: encryptionKey,
     })
-    return await this.bzz.setFeedContent(feed, payload, undefined, signParams)
+    return await this.bzzFeed.setContent(feed, payload, undefined, signParams)
   }
 
   public createFeedPublisher<T>(
@@ -163,7 +167,7 @@ export class Sync {
       const payload = await this.core.encodeEntity(params.entityType, data, {
         key: encryptionKey,
       })
-      return await this.bzz.setFeedContent(feed, payload, undefined, signParams)
+      return await this.bzzFeed.setContent(feed, payload, undefined, signParams)
     }
     return this.createPublisher<T, string>(push)
   }
@@ -174,15 +178,18 @@ export class Sync {
       params.name,
       params.reader,
     )
+    const config = { bzz: this.bzzFeed, feed, signParams }
 
-    let encode
-    if (params.reader != null) {
-      encode = async (chapter: PartialChapter) => {
+    if (params.reader == null) {
+      return new TimelineWriter<T>(config)
+    }
+
+    class EncryptedTimelineWriter extends TimelineWriter<T> {
+      async write(chapter: PartialChapter): Promise<Buffer> {
         return await encodePayload(chapter, { key: encryptionKey })
       }
     }
-
-    return new TimelineWriter<T>({ bzz: this.bzz, feed, encode, signParams })
+    return new EncryptedTimelineWriter(config)
   }
 
   public createTimelinePublisher<T>(
@@ -210,7 +217,7 @@ export class Sync {
       params.keyPair,
     )
 
-    const res = await this.bzz.getFeedContent(feed, { mode: 'raw' })
+    const res = await this.bzzFeed.getContent(feed, { mode: 'raw' })
     if (res === null) {
       return null
     }
@@ -229,7 +236,7 @@ export class Sync {
     )
 
     return async (): Promise<T | null> => {
-      const res = await this.bzz.getFeedContent(feed, { mode: 'raw' })
+      const res = await this.bzzFeed.getContent(feed, { mode: 'raw' })
       if (res === null) {
         return null
       }
@@ -250,8 +257,8 @@ export class Sync {
       params.keyPair,
     )
 
-    return this.bzz
-      .pollFeedContent(feed, {
+    return this.bzzFeed
+      .pollContent(feed, {
         changedOnly: true,
         whenEmpty: 'ignore',
         ...params.options,
@@ -276,16 +283,17 @@ export class Sync {
       params.name,
       params.keyPair,
     )
+    const core = this.core
 
-    const decode = async (
-      res: BaseResponse<NodeJS.ReadableStream>,
-    ): Promise<Chapter<EntityPayload<T>>> => {
-      const body = await decodeStream(res.body, { key: encryptionKey })
-      const chapter = validateChapter(fromBuffer(body))
-      await this.core.validateEntity(chapter.content)
-      return chapter
+    class EncryptedTimelineReader extends TimelineReader<EntityPayload<T>> {
+      async read(res: Response): Promise<Chapter<EntityPayload<T>>> {
+        const body = await decodeStream(res.body, { key: encryptionKey })
+        const chapter = validateChapter(fromBuffer(body))
+        await core.validateEntity(chapter.content)
+        return chapter
+      }
     }
 
-    return new TimelineReader<EntityPayload<T>>({ bzz: this.bzz, feed, decode })
+    return new EncryptedTimelineReader({ bzz: this.bzzFeed, feed })
   }
 }

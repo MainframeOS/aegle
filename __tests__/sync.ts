@@ -1,5 +1,6 @@
-import { Bzz, getFeedTopic } from '@erebos/api-bzz-node'
-import { createHex } from '@erebos/hex'
+import { BzzFeed, getFeedTopic } from '@erebos/bzz-feed'
+import { BzzNode } from '@erebos/bzz-node'
+import { Hex } from '@erebos/hex'
 import { hash } from '@erebos/keccak256'
 import { createKeyPair, sign } from '@erebos/secp256k1'
 
@@ -61,7 +62,7 @@ describe('sync', () => {
           user: getPublicAddress(publisher),
           topic: getFeedTopic({
             name: 'hello',
-            topic: createHex(hash(encryptionKey)).value,
+            topic: Hex.from(hash(encryptionKey)).value,
           }),
         },
         encryptionKey,
@@ -113,7 +114,7 @@ describe('sync', () => {
           user: getPublicAddress(publisher),
           topic: getFeedTopic({
             name: 'hello',
-            topic: createHex(hash(encryptionKey)).value,
+            topic: Hex.from(hash(encryptionKey)).value,
           }),
         },
         encryptionKey,
@@ -123,13 +124,11 @@ describe('sync', () => {
   })
 
   describe('Sync class', () => {
-    const sync = new Sync({
-      bzz: new Bzz({
-        url: 'http://localhost:8500',
-        signBytes: (bytes, key) => Promise.resolve(sign(bytes, key)),
-      }),
-      core: new Core(),
+    const bzzFeed = new BzzFeed({
+      bzz: new BzzNode({ url: 'http://localhost:8500' }),
+      signBytes: (bytes, key) => Promise.resolve(sign(bytes, key)),
     })
+    const sync = new Sync({ bzz: bzzFeed, core: new Core() })
     const aliceKP = createKeyPair()
     const alicePubKey = aliceKP.getPublic('hex')
     const bobKP = createKeyPair()

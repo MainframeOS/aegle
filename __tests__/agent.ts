@@ -1,5 +1,6 @@
 import { Readable } from 'stream'
-import { Bzz } from '@erebos/api-bzz-node'
+import { BzzFeed } from '@erebos/bzz-feed'
+import { BzzNode } from '@erebos/bzz-node'
 import { createKeyPair, sign } from '@erebos/secp256k1'
 // eslint-disable-next-line import/default
 import getStream from 'get-stream'
@@ -39,8 +40,8 @@ import {
 } from '@aegle/agent'
 
 describe('agent', () => {
-  const bzz = new Bzz({
-    url: 'http://localhost:8500',
+  const bzz = new BzzFeed({
+    bzz: new BzzNode({ url: 'http://localhost:8500' }),
     signBytes: (bytes, key) => Promise.resolve(sign(bytes, key)),
   })
   const core = new Core()

@@ -10,7 +10,7 @@ npm install @aegle/sync
 
 ### FeedReadParams
 
-Uses [`FeedParams` interface](https://erebos.js.org/docs/api-bzz#feedparams)
+Uses [`FeedParams` interface](https://erebos.js.org/docs/bzz-feed#feedparams)
 
 ```ts
 interface FeedReadParams {
@@ -41,7 +41,8 @@ interface ChannelParams {
 ### WriterParams
 
 Extends [`ChannelParams`](#channelparams)
-Uses [`KeyPair` class](https://erebos.js.org/docs/secp256k1#keypair) and [`UploadOptions` interface](https://erebos.js.org/docs/api-bzz#uploadoptions)
+
+Uses [`KeyPair` class](https://erebos.js.org/docs/secp256k1#keypair) and [`UploadOptions` interface](https://erebos.js.org/docs/bzz#uploadoptions)
 
 ```ts
 interface WriterParams extends ChannelParams {
@@ -54,6 +55,7 @@ interface WriterParams extends ChannelParams {
 ### ReaderParams
 
 Extends [`ChannelParams`](#channelparams)
+
 Uses [`KeyPair` class](https://erebos.js.org/docs/secp256k1#keypair)
 
 ```ts
@@ -66,7 +68,8 @@ interface ReaderParams extends ChannelParams {
 ### FeedReadParams
 
 Extends [`ReaderParams`](#readerparams)
-Uses [`PollFeedContentOptions`](https://erebos.js.org/docs/api-bzz#pollfeedcontentoptions)
+
+Uses [`PollFeedContentOptions`](https://erebos.js.org/docs/bzz-feed#pollfeedcontentoptions)
 
 ```ts
 interface SubscriberParams extends ReaderParams {
@@ -76,7 +79,7 @@ interface SubscriberParams extends ReaderParams {
 
 ### SyncConfig
 
-Uses [`Bzz` class](https://erebos.js.org/docs/api-bzz) and [`Core` class](api-core.md#core-class)
+Uses [`Bzz` class](https://erebos.js.org/docs/bzz#bzz-class) and [`Core` class](api-core.md#core-class)
 
 ```ts
 interface SyncConfig {

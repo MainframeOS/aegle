@@ -236,7 +236,7 @@ Validates the [`MessageData` interface](#messagedata)
 
 ## Core class
 
-### validateEntity()
+### .validateEntity()
 
 **Arguments**
 
@@ -244,7 +244,7 @@ Validates the [`MessageData` interface](#messagedata)
 
 **Returns** `Promise<EntityPayload<T>>`
 
-### validateBuffer()
+### .validateBuffer()
 
 **Arguments**
 
@@ -252,7 +252,7 @@ Validates the [`MessageData` interface](#messagedata)
 
 **Returns** `Promise<EntityPayload<T = any>>`
 
-### decodeEntityStream()
+### .decodeEntityStream()
 
 **Arguments**
 
@@ -261,7 +261,7 @@ Validates the [`MessageData` interface](#messagedata)
 
 **Returns** `Promise<EntityPayload<T = any>>`
 
-### encodeEntity()
+### .encodeEntity()
 
 **Arguments**
 

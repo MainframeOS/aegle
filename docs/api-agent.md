@@ -43,6 +43,7 @@ interface ActorAgentData {
 ### ActorAgentParams
 
 Extends [`SyncParams`](#syncparams)
+
 Uses [`Sync` class](api-sync.md#sync-class) and [`ActorAgentData` interface](#actoragentdata)
 
 ```ts
@@ -114,6 +115,7 @@ interface ContactAgentError {
 ### ContactAgentParams
 
 Extends [`SyncParams`](#syncparams)
+
 Uses [`Sync` class](api-sync.md#sync-class) and [`ContactAgentData` interface](#contactagentdata)
 
 ```ts
@@ -168,6 +170,7 @@ enum FileSystemPushSyncState {
 ### FileSystemReaderParams
 
 Extends [`FileSystemParams`](#filesystemparams) and [`SyncParams`](#syncparams)
+
 Uses [`KeyPair` class](https://erebos.js.org/docs/secp256k1#keypair)
 
 ```ts
@@ -189,6 +192,7 @@ interface FileSystemChanges {
 ### FileSystemWriterParams
 
 Extends [`FileSystemParams`](#filesystemparams) and [`SyncParams`](#syncparams)
+
 Uses [`KeyPair` class](https://erebos.js.org/docs/secp256k1#keypair) and [`FilesRecord` type](api-core.md#filesrecord)
 
 ```ts
@@ -202,6 +206,7 @@ interface FileSystemWriterParams extends FileSystemParams, SyncParams {
 ### MailboxAgentParams
 
 Extends [`SyncParams`](#syncparams)
+
 Uses [`KeyPair` class](https://erebos.js.org/docs/secp256k1#keypair) and [`Sync` class](api-sync.md#sync-class)
 
 ```ts
@@ -243,6 +248,7 @@ interface InboxAgentParams extends MailboxAgentParams, InboxAgentData {}
 ### InboxesAgentInboxParams
 
 Extends [`SyncParams`](#syncparams)
+
 Uses [`MessageData` interface](api-core.md#messagedata)
 
 ```ts
@@ -255,6 +261,7 @@ interface InboxesAgentInboxParams extends SyncParams {
 ### InboxesAgentParams
 
 Extends [`MailboxAgentParams` interface](#mailboxagentparams)
+
 Uses [`InboxesAgentInboxParams` interface](#inboxesagentinboxparams)
 
 ```ts

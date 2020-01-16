@@ -297,7 +297,7 @@ export class FileSystemWriter extends FileSystem {
         { type: FILE_SYSTEM_NAME, data: { files: this.files$.value } },
         { key: this.feedParams.encryptionKey },
       )
-      await this.sync.bzz.setFeedContent(
+      await this.sync.bzzFeed.setContent(
         this.feedParams.feed,
         payload,
         undefined,
@@ -318,7 +318,7 @@ export class FileSystemWriter extends FileSystem {
         throw new Error('FileSystemWriter is already being initialized')
       default: {
         try {
-          const res = await this.sync.bzz.getFeedContent(this.feedParams.feed, {
+          const res = await this.sync.bzzFeed.getContent(this.feedParams.feed, {
             mode: 'raw',
           })
           if (res != null) {
