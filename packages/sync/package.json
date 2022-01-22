@@ -27,7 +27,7 @@
     "@erebos/keccak256": "^0.13.1",
     "@erebos/secp256k1": "^0.10.0",
     "@erebos/timeline": "^0.13.1",
-    "node-fetch": "^2.6.0",
+    "node-fetch": "^3.1.1",
     "p-queue": "^6.2.1",
     "rxjs": "^6.5.4"
   },
